@@ -7,7 +7,7 @@ let mongoServer;
 
 const connectDB = async () => {
   try {
-    let uri = process.env.MONGO_URI;
+    let uri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/sketchsync';
     let isMemory = false;
     
     // First, try connecting to the actual local MongoDB (if running)
