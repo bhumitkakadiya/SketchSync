@@ -22,8 +22,8 @@ const start = async () => {
   // Initialize Socket.IO
   await initSocketIO(httpServer, redisClients);
 
-  httpServer.listen(PORT, '127.0.0.1', () => {
-    logger.info(`🚀 SketchSync Server running on http://127.0.0.1:${PORT}`);
+  httpServer.listen(PORT, '0.0.0.0', () => {
+    logger.info(`🚀 SketchSync Server running on http://0.0.0.0:${PORT}`);
     logger.info(`   Environment: ${process.env.NODE_ENV}`);
     logger.info(`   WebSocket namespace: /whiteboard`);
   });
