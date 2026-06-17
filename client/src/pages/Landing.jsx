@@ -25,7 +25,7 @@ export default function Landing() {
     <div className="min-h-screen bg-transparent flex flex-col relative overflow-hidden">
       <InteractiveBackground />
       {/* Nav */}
-      <nav className="sticky top-0 z-50 w-full bg-white/60 dark:bg-black/60 backdrop-blur-md border-b border-surface-200 dark:border-white/[0.06]">
+      <nav className="fixed top-0 z-50 w-full bg-white/40 dark:bg-black/40 backdrop-blur-md border-b border-surface-200 dark:border-white/[0.06]">
         <div className="flex items-center justify-between px-8 py-4 max-w-7xl mx-auto">
         <Link to="/" className="flex items-center gap-2.5 group">
           <Logo className="w-8 h-8 text-brand-500 drop-shadow-[0_0_15px_rgba(34,197,94,0.4)] group-hover:scale-105 transition-transform" />
@@ -58,7 +58,7 @@ export default function Landing() {
       </div>
     </nav>
       {/* Hero */}
-      <main className="relative z-10 max-w-7xl mx-auto px-8 pt-20 pb-32 text-center">
+      <main className="relative z-10 max-w-7xl mx-auto px-8 pt-32 pb-32 text-center">
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full glass border border-brand-500/30 text-brand-700 dark:text-brand-400 text-sm font-medium mb-8 animate-fade-in">
           <span className="w-2 h-2 rounded-full bg-green-500 dark:bg-green-400 animate-pulse" />
           Real-time collaboration — up to 50 users per room

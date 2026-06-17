@@ -43,7 +43,7 @@ export default function Dashboard() {
     <div className="min-h-screen bg-transparent relative overflow-hidden">
       <DashboardBackground />
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-white/60 dark:bg-black/60 backdrop-blur-md border-b border-surface-200 dark:border-white/[0.06] px-6 py-4">
+      <header className="fixed top-0 z-50 w-full bg-white/40 dark:bg-black/40 backdrop-blur-md border-b border-surface-200 dark:border-white/[0.06] px-6 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <Link to="/" className="flex items-center gap-3 group">
             <Logo className="w-8 h-8 text-brand-500 drop-shadow-[0_0_12px_rgba(34,197,94,0.3)] group-hover:scale-105 transition-transform" />
@@ -81,7 +81,7 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-6 py-10 relative z-10">
+      <main className="max-w-7xl mx-auto px-6 pt-28 pb-8 relative z-10">
         {/* Welcome */}
         <div className="mb-10 animate-fade-in">
           <h1 className="text-3xl font-bold mb-1" style={{ color: 'var(--text-primary)' }}>
@@ -154,7 +154,7 @@ export default function Dashboard() {
             <RecentSessions rooms={roomsData} />
           </section>
         )}
-      </div>
+      </main>
 
       {showCreate && <CreateRoomModal onClose={() => setShowCreate(false)} />}
       {showJoin && <JoinRoomModal onClose={() => setShowJoin(false)} />}
