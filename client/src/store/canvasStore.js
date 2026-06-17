@@ -4,9 +4,13 @@ import { TOOLS } from '../constants/tools';
 export const useCanvasStore = create((set, get) => ({
   activeTool: TOOLS.PEN,
   color: '#3B82F6',
+  fillColor: 'transparent', // fill color for shapes
   brushSize: 4,
   eraserSize: 40,
   opacity: 1,
+  strokeStyle: 'solid', // 'solid' | 'dashed' | 'dotted'
+  fontSize: 18,
+  fontFamily: 'Inter',
   isAIOpen: false,
 
   // Undo/Redo stacks (arrays of strokeIds)
@@ -16,12 +20,20 @@ export const useCanvasStore = create((set, get) => ({
   // Active strokes map from other users: {strokeId -> {points, color, size, ...}}
   remoteStrokes: {},
 
+  // Currently selected element strokeId (shared for sidebar)
+  selectedStrokeId: null,
+
   setTool: (tool) => set({ activeTool: tool }),
   setColor: (color) => set({ color }),
+  setFillColor: (fillColor) => set({ fillColor }),
   setBrushSize: (size) => set({ brushSize: size }),
   setEraserSize: (size) => set({ eraserSize: size }),
   setOpacity: (opacity) => set({ opacity }),
+  setStrokeStyle: (strokeStyle) => set({ strokeStyle }),
+  setFontSize: (fontSize) => set({ fontSize }),
+  setFontFamily: (fontFamily) => set({ fontFamily }),
   toggleAI: () => set((state) => ({ isAIOpen: !state.isAIOpen })),
+  setSelectedStrokeId: (id) => set({ selectedStrokeId: id }),
 
   pushUndo: (strokeId) =>
     set((state) => ({

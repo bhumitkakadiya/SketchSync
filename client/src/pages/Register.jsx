@@ -4,6 +4,8 @@ import { useAuthStore } from '../store/authStore';
 import { authService } from '../services/authService';
 import toast from 'react-hot-toast';
 import InteractiveBackground from '../components/ui/InteractiveBackground';
+import Logo from '../components/ui/Logo';
+import ThemeToggle from '../components/ThemeToggle';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -31,13 +33,16 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen bg-transparent flex items-center justify-center px-4 py-12">
+    <div className="min-h-screen bg-transparent flex items-center justify-center px-4 py-12 relative">
       <InteractiveBackground />
+      <div className="absolute top-6 right-6 z-50">
+        <ThemeToggle />
+      </div>
       <div className="w-full max-w-sm relative z-10 animate-slide-up">
         <div className="text-center mb-8">
-          <Link to="/" className="inline-flex items-center gap-2.5 mb-6">
-            <img src="/logo.png" alt="SketchSync" className="w-10 h-10 rounded-xl shadow-glow-brand object-cover" />
-            <span className="text-2xl font-bold gradient-text">SketchSync</span>
+          <Link to="/" className="inline-flex items-center gap-3.5 mb-6 group">
+            <Logo className="w-14 h-14 text-brand-500 drop-shadow-[0_0_16px_rgba(34,197,94,0.4)] group-hover:scale-105 transition-transform" />
+            <span className="text-4xl font-black gradient-text tracking-tight">SketchSync</span>
           </Link>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Create your account</h1>
           <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">Free forever — no credit card needed</p>

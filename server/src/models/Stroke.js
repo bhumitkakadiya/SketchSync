@@ -9,7 +9,7 @@ const StrokeSchema = new mongoose.Schema({
   absoluteTs: { type: Date, default: Date.now },  // wall clock
   type: {
     type: String,
-    enum: ['pen','eraser','highlighter','line','rect','circle','text','undo','redo','clear'],
+    enum: ['pen','eraser','highlighter','line','arrow','rect','circle','text','image','sticky','undo','redo','clear'],
     required: true,
   },
   data: {

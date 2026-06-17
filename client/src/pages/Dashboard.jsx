@@ -8,6 +8,7 @@ import CreateRoomModal from '../components/room/CreateRoomModal';
 import JoinRoomModal from '../components/room/JoinRoomModal';
 import RecentSessions from '../components/dashboard/RecentSessions';
 import ProfileModal from '../components/dashboard/ProfileModal';
+import DashboardBackground from '../components/dashboard/DashboardBackground';
 import ThemeToggle from '../components/ThemeToggle';
 import TiltCard from '../components/ui/TiltCard';
 import Logo from '../components/ui/Logo';
@@ -39,7 +40,8 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-transparent">
+    <div className="min-h-screen bg-transparent relative overflow-hidden">
+      <DashboardBackground />
       {/* Header */}
       <header className="sticky top-0 z-50 bg-white/60 dark:bg-black/60 backdrop-blur-md border-b border-surface-200 dark:border-white/[0.06] px-6 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
@@ -79,7 +81,7 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-6 py-10">
+      <div className="max-w-7xl mx-auto px-6 py-10 relative z-10">
         {/* Welcome */}
         <div className="mb-10 animate-fade-in">
           <h1 className="text-3xl font-bold mb-1" style={{ color: 'var(--text-primary)' }}>
@@ -171,12 +173,8 @@ function RoomCard({ room, userId, onOpen, onDelete, onReplay }) {
       
       {/* Thumbnail */}
       <div className="w-full h-32 bg-surface-100 relative overflow-hidden flex-shrink-0" onClick={onOpen}>
-        {room.canvasState ? (
-          <img src={`data:image/png;base64,${room.canvasState}`} alt="Preview" className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity group-hover:scale-105 duration-500" />
-        ) : (
-          <AnimatedRoomBackground roomId={room._id} />
-        )}
-        <div className={`absolute top-3 right-3 w-2.5 h-2.5 rounded-full ${room.isActive ? 'bg-green-400 shadow-[0_0_8px_#4ade80]' : 'bg-gray-500'}`} title={room.isActive ? 'Active session' : 'Offline'} />
+        <AnimatedRoomBackground room={room} />
+        <div className={`absolute top-3 right-3 w-2.5 h-2.5 rounded-full z-20 ${room.isActive ? 'bg-green-400 shadow-[0_0_8px_#4ade80]' : 'bg-gray-500'}`} title={room.isActive ? 'Active session' : 'Offline'} />
       </div>
 
       <div className="flex flex-col flex-1 px-5 pb-5 pt-1 gap-4">
@@ -239,9 +237,10 @@ const STUDY_ICONS = [
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
 ];
 
-function AnimatedRoomBackground({ roomId }) {
-  // Generate deterministic hash from roomId
-  const hash = String(roomId).split('').reduce((acc, char) => char.charCodeAt(0) + ((acc << 5) - acc), 0);
+function AnimatedRoomBackground({ room }) {
+  // Generate deterministic hash from roomId and name
+  const hashStr = String(room?._id || '') + String(room?.name || '');
+  const hash = hashStr.split('').reduce((acc, char) => char.charCodeAt(0) + ((acc << 5) - acc), 0);
   const hue1 = Math.abs(hash % 360);
   const hue2 = (hue1 + 60) % 360;
   

@@ -14,7 +14,8 @@ const canvasHandlers = (io, socket) => {
   };
 
   // CANVAS:STROKE_START
-  socket.on('CANVAS:STROKE_START', ({ strokeId, type, color, size, x, y, sessionId }) => {
+  socket.on('CANVAS:STROKE_START', (payload) => {
+    const { strokeId, type, color, size, x, y, sessionId } = payload || {};
     strokeBuffer.set(strokeId, {
       sessionId,
       roomId: socket.currentRoom,
@@ -30,14 +31,16 @@ const canvasHandlers = (io, socket) => {
   });
 
   // CANVAS:STROKE_MOVE
-  socket.on('CANVAS:STROKE_MOVE', ({ strokeId, x, y, timestamp }) => {
+  socket.on('CANVAS:STROKE_MOVE', (payload) => {
+    const { strokeId, x, y, timestamp } = payload || {};
     const buf = strokeBuffer.get(strokeId);
     if (buf) buf.points.push({ x, y });
     emit('CANVAS:STROKE_MOVE', { strokeId, x, y });
   });
 
   // CANVAS:STROKE_END — persist to MongoDB
-  socket.on('CANVAS:STROKE_END', async ({ strokeId, points, metadata }) => {
+  socket.on('CANVAS:STROKE_END', async (payload) => {
+    const { strokeId, points, metadata } = payload || {};
     try {
       const buf = strokeBuffer.get(strokeId);
       if (!buf) return;
@@ -82,7 +85,8 @@ const canvasHandlers = (io, socket) => {
   });
 
   // CANVAS:SHAPE
-  socket.on('CANVAS:SHAPE', async ({ strokeId, type, startX, startY, endX, endY, color, brushSize, sessionId, base64, width, height }) => {
+  socket.on('CANVAS:SHAPE', async (payload) => {
+    const { strokeId, type, startX, startY, endX, endY, color, brushSize, sessionId, base64, width, height } = payload || {};
     emit('CANVAS:SHAPE', { strokeId, userId: socket.user.id, type, startX, startY, endX, endY, color, brushSize, base64, width, height });
 
     // Persist shape
@@ -107,8 +111,34 @@ const canvasHandlers = (io, socket) => {
     }
   });
 
+  // CANVAS:UPDATE_SHAPE
+  socket.on('CANVAS:UPDATE_SHAPE', async (payload) => {
+    const { strokeId, startX, startY, endX, endY, width, height, text, color } = payload || {};
+    emit('CANVAS:UPDATE_SHAPE', { strokeId, startX, startY, endX, endY, width, height, text, color });
+    try {
+      if (!socket.currentRoom) return;
+      const updates = {};
+      if (startX !== undefined) updates['data.startX'] = startX;
+      if (startY !== undefined) updates['data.startY'] = startY;
+      if (endX !== undefined) updates['data.endX'] = endX;
+      if (endY !== undefined) updates['data.endY'] = endY;
+      if (width !== undefined) updates['data.width'] = width;
+      if (height !== undefined) updates['data.height'] = height;
+      if (text !== undefined) updates['data.text'] = text;
+      if (color !== undefined) updates['data.color'] = color;
+
+      await Stroke.findOneAndUpdate(
+        { strokeId, roomId: socket.currentRoom },
+        { $set: updates }
+      );
+    } catch (err) {
+      logger.error('UPDATE_SHAPE persist error:', err.message);
+    }
+  });
+
   // CANVAS:TEXT
-  socket.on('CANVAS:TEXT', async ({ strokeId, x, y, text, fontSize, color, sessionId }) => {
+  socket.on('CANVAS:TEXT', async (payload) => {
+    const { strokeId, x, y, text, fontSize, color, sessionId } = payload || {};
     emit('CANVAS:TEXT', { strokeId, userId: socket.user.id, x, y, text, fontSize, color });
     try {
       if (!sessionId || !socket.currentRoom) return;
@@ -130,7 +160,8 @@ const canvasHandlers = (io, socket) => {
   });
 
   // CANVAS:UNDO
-  socket.on('CANVAS:UNDO', async ({ strokeId, sessionId }) => {
+  socket.on('CANVAS:UNDO', async (payload) => {
+    const { strokeId, sessionId } = payload || {};
     io.in(`room:${socket.currentRoom}`).emit('CANVAS:UNDO', { userId: socket.user.id, strokeId });
     try {
       await Stroke.findOneAndUpdate({ strokeId }, { undone: true });
@@ -140,7 +171,8 @@ const canvasHandlers = (io, socket) => {
   });
 
   // CANVAS:REDO
-  socket.on('CANVAS:REDO', async ({ strokeId }) => {
+  socket.on('CANVAS:REDO', async (payload) => {
+    const { strokeId } = payload || {};
     io.in(`room:${socket.currentRoom}`).emit('CANVAS:REDO', { userId: socket.user.id, strokeId });
     try {
       await Stroke.findOneAndUpdate({ strokeId }, { undone: false });
@@ -150,7 +182,8 @@ const canvasHandlers = (io, socket) => {
   });
 
   // CANVAS:SAVE_STATE — client sends base64 PNG snapshot to persist
-  socket.on('CANVAS:SAVE_STATE', async ({ imageBase64 }) => {
+  socket.on('CANVAS:SAVE_STATE', async (payload) => {
+    const { imageBase64 } = payload || {};
     try {
       if (!socket.currentRoom || !imageBase64) return;
       await Room.findByIdAndUpdate(socket.currentRoom, {
@@ -163,7 +196,8 @@ const canvasHandlers = (io, socket) => {
   });
 
   // CANVAS:CLEAR
-  socket.on('CANVAS:CLEAR', async ({ sessionId, timestamp }) => {
+  socket.on('CANVAS:CLEAR', async (payload) => {
+    const { sessionId, timestamp } = payload || {};
     emit('CANVAS:CLEAR', { userId: socket.user.id, timestamp });
     // Mark all session strokes as undone (clear = mass undo)
     try {

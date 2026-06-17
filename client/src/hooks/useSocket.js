@@ -59,6 +59,9 @@ const initSocket = (accessToken, { setConnected, setPageCount, addUser, removeUs
   socketInstance.on(SOCKET_EVENTS.CANVAS_TEXT, (data) => {
     if (globalCallbacks.current.onText) globalCallbacks.current.onText(data);
   });
+  socketInstance.on('CANVAS:UPDATE_SHAPE', (data) => {
+    if (globalCallbacks.current.onUpdateShape) globalCallbacks.current.onUpdateShape(data);
+  });
   socketInstance.on(SOCKET_EVENTS.CANVAS_BULK_LOAD, (data) => {
     if (globalCallbacks.current.onBulkLoad) globalCallbacks.current.onBulkLoad(data);
   });
