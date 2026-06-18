@@ -27,9 +27,18 @@ exports.register = async (req, res, next) => {
       return res.status(400).json({ success: false, error: { code: 'INVALID_EMAIL', message: 'Please provide a valid email address' } });
     }
 
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
-    if (!passwordRegex.test(password)) {
-      return res.status(400).json({ success: false, error: { code: 'WEAK_PASSWORD', message: 'Password must be at least 8 characters long, and contain at least one uppercase letter, one lowercase letter, one number, and one special character' } });
+    if (password.length < 6) {
+      return res.status(400).json({ success: false, error: { code: 'WEAK_PASSWORD', message: 'Password must be at least 6 characters long' } });
+    }
+
+    // Check for existing email/username before attempting to save
+    const existingEmail = await User.findOne({ email: email.toLowerCase() });
+    if (existingEmail) {
+      return res.status(409).json({ success: false, error: { code: 'DUPLICATE_KEY', message: 'email already exists' } });
+    }
+    const existingUsername = await User.findOne({ username });
+    if (existingUsername) {
+      return res.status(409).json({ success: false, error: { code: 'DUPLICATE_KEY', message: 'username already exists' } });
     }
 
     const user = new User({ username, email, password, displayName: displayName || username });
@@ -46,6 +55,10 @@ exports.register = async (req, res, next) => {
     logger.info(`User registered: ${user.email}`);
     res.status(201).json({ success: true, data: { accessToken, user: user.toPublic() } });
   } catch (err) {
+    if (err.code === 11000) {
+      const field = Object.keys(err.keyValue || {})[0] || 'field';
+      return res.status(409).json({ success: false, error: { code: 'DUPLICATE_KEY', message: `${field} already exists` } });
+    }
     next(err);
   }
 };
