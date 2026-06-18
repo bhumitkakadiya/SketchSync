@@ -10,7 +10,7 @@ import ThemeToggle from '../components/ThemeToggle';
 export default function Login() {
   const navigate = useNavigate();
   const setAuth = useAuthStore((s) => s.setAuth);
-  const [form, setForm] = useState({ email: 'admin@sketchsync.com', password: 'password123' });
+  const [form, setForm] = useState({ email: '', password: '' });
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
