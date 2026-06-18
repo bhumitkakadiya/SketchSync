@@ -21,8 +21,22 @@ export default function StickyNote({ note, onUpdate, onRemove }) {
 
   const onMouseDown = useCallback((e) => {
     if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
-    e.preventDefault();
+    
     const rect = noteRef.current.getBoundingClientRect();
+    const isBottomRight = e.clientX > rect.right - 20 && e.clientY > rect.bottom - 20;
+    if (isBottomRight) {
+      const onResizeMouseUp = () => {
+        window.removeEventListener('mouseup', onResizeMouseUp);
+        if (noteRef.current) {
+          const newRect = noteRef.current.getBoundingClientRect();
+          onUpdate(note.id, { width: newRect.width, height: newRect.height });
+        }
+      };
+      window.addEventListener('mouseup', onResizeMouseUp);
+      return;
+    }
+
+    e.preventDefault();
     dragOffset.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
     setIsDragging(true);
 
@@ -45,11 +59,13 @@ export default function StickyNote({ note, onUpdate, onRemove }) {
   return (
     <div
       ref={noteRef}
-      className="absolute rounded-xl shadow-lg select-none group"
+      className="absolute rounded-xl shadow-lg select-none group resize overflow-hidden flex flex-col"
       style={{
         left: note.x,
         top: note.y,
-        width: 180,
+        width: note.width || 180,
+        height: note.height || 120,
+        minWidth: 150,
         minHeight: 120,
         backgroundColor: colorConfig.bg,
         cursor: isDragging ? 'grabbing' : 'grab',
@@ -86,8 +102,8 @@ export default function StickyNote({ note, onUpdate, onRemove }) {
 
       {/* Text area */}
       <textarea
-        className="w-full p-2 text-sm font-medium resize-none bg-transparent border-none outline-none leading-relaxed"
-        style={{ color: colorConfig.text, minHeight: 80 }}
+        className="w-full p-2 text-sm font-medium resize-none bg-transparent border-none outline-none leading-relaxed flex-1"
+        style={{ color: colorConfig.text }}
         value={note.text}
         onChange={(e) => onUpdate(note.id, { text: e.target.value })}
         onFocus={() => setIsEditing(true)}

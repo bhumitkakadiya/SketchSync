@@ -5,8 +5,8 @@ import { TOOLS } from '../../constants/tools';
 import { SOCKET_EVENTS } from '../../constants/socketEvents';
 import {
   drawPen, drawEraser, drawLine, drawRect, drawCircle, drawText, drawCustomImage, drawArrow,
-  drawTriangle, drawDiamond, drawStar,
-  clearCanvas, commitPreviewToMain, renderSingleStroke, drawImageOnCanvas
+  clearCanvas, commitPreviewToMain, renderSingleStroke, drawImageOnCanvas,
+  drawPolygon, drawStar, drawFreehand, drawBezier, drawSlide, drawFrame, drawTriangle, drawDiamond, drawDoubleArrow
 } from '../../utils/canvasUtils';
 import { v4 as uuidv4 } from 'uuid';
 import StickyNote from './StickyNote';
@@ -20,7 +20,8 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
 
   const {
     activeTool, color, fillColor, brushSize, eraserSize, opacity, strokeStyle,
-    fontSize, fontFamily, pushUndo, setSelectedStrokeId
+    fontSize, fontFamily, textBold, textItalic, pushUndo, setSelectedStrokeId,
+    shadowColor, shadowBlur, shadowOffsetX, shadowOffsetY
   } = useCanvasStore();
   const { room } = useRoomStore();
 
@@ -32,6 +33,30 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
   const currentPoints = useRef([]);
   const shapeStart = useRef(null);
   const activePointerId = useRef(null);
+  const mousePosRef = useRef(null);
+
+  const isSelectableType = (type) => ['image', 'rect', 'circle', 'line', 'arrow', 'text', 'polygon', 'bezier', 'freehand', 'double_arrow', 'frame', 'slide'].includes(type);
+
+  const getStrokeBoundingBox = (stroke) => {
+    let x, y, w, h;
+    if (stroke.type === 'image') {
+      x = stroke.startX; y = stroke.startY; w = stroke.width; h = stroke.height;
+    } else if (['polygon', 'bezier', 'freehand'].includes(stroke.type) && stroke.points && stroke.points.length > 0) {
+      const xs = stroke.points.map(p => p.x);
+      const ys = stroke.points.map(p => p.y);
+      x = Math.min(...xs);
+      y = Math.min(...ys);
+      w = Math.max(...xs) - x;
+      h = Math.max(...ys) - y;
+    } else {
+      x = Math.min(stroke.startX || 0, stroke.endX || 0);
+      y = Math.min(stroke.startY || 0, stroke.endY || 0);
+      w = Math.abs((stroke.endX || 0) - (stroke.startX || 0));
+      h = Math.abs((stroke.endY || 0) - (stroke.startY || 0));
+    }
+    return { x, y, w, h };
+  };
+
 
   // Text input state
   const [textInput, setTextInput] = useState(null);
@@ -40,7 +65,7 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
   // Local stroke history for undo/redo
   const localStrokes = useRef([]);
   const backgroundImage = useRef(null);
-  
+
   // Laser Pointer State
   const laserPoints = useRef([]);
 
@@ -57,6 +82,23 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
   const setSelected = useCallback((id) => {
     selectedStrokeIdRef.current = id;
     setSelectedStrokeId(id);
+    if (id) {
+      const stroke = localStrokes.current.find(s => s.strokeId === id);
+      if (stroke) {
+        if (stroke.color) useCanvasStore.getState().setColor(stroke.color);
+        if (stroke.fillColor) useCanvasStore.getState().setFillColor(stroke.fillColor);
+        if (stroke.opacity !== undefined) useCanvasStore.getState().setOpacity(stroke.opacity);
+        if (stroke.brushSize) useCanvasStore.getState().setBrushSize(stroke.brushSize);
+        if (stroke.shadowColor) useCanvasStore.getState().setShadowColor(stroke.shadowColor);
+        if (stroke.shadowBlur !== undefined) useCanvasStore.getState().setShadowBlur(stroke.shadowBlur);
+        if (stroke.shadowOffsetX !== undefined) useCanvasStore.getState().setShadowOffsetX(stroke.shadowOffsetX);
+        if (stroke.shadowOffsetY !== undefined) useCanvasStore.getState().setShadowOffsetY(stroke.shadowOffsetY);
+        if (stroke.fontSize) useCanvasStore.getState().setFontSize(stroke.fontSize);
+        if (stroke.fontFamily) useCanvasStore.getState().setFontFamily(stroke.fontFamily);
+        if (stroke.bold !== undefined) useCanvasStore.getState().setTextBold(stroke.bold);
+        if (stroke.italic !== undefined) useCanvasStore.getState().setTextItalic(stroke.italic);
+      }
+    }
   }, [setSelectedStrokeId]);
 
   const redrawMainCanvas = useCallback(() => {
@@ -83,35 +125,66 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
 
     localStrokes.current.forEach(stroke => {
       if (stroke.undone) return;
-      if (stroke.type === 'pen') drawPen(ctx, stroke.points, stroke.color, stroke.brushSize);
-      else if (stroke.type === 'highlighter') drawPen(ctx, stroke.points, stroke.color, stroke.brushSize, 0.3);
+      const shadowData = {
+        shadowColor: stroke.shadowColor,
+        shadowBlur: stroke.shadowBlur,
+        shadowOffsetX: stroke.shadowOffsetX,
+        shadowOffsetY: stroke.shadowOffsetY,
+        flipX: stroke.flipX,
+        flipY: stroke.flipY,
+        opacity: stroke.opacity
+      };
+
+      if (stroke.type === 'pen') drawPen(ctx, stroke.points, stroke.color, stroke.brushSize, stroke.opacity, shadowData);
+      else if (stroke.type === 'marker') drawPen(ctx, stroke.points, stroke.color, stroke.brushSize, stroke.opacity || 0.8, shadowData);
+      else if (stroke.type === 'highlighter') drawPen(ctx, stroke.points, stroke.color, stroke.brushSize, 0.3, shadowData);
       else if (stroke.type === 'eraser') drawEraser(ctx, stroke.points, stroke.brushSize);
-      else if (['line', 'rect', 'circle', 'arrow'].includes(stroke.type)) {
+      else if (['line', 'rect', 'circle', 'arrow', 'double_arrow', 'triangle', 'diamond', 'star', 'frame', 'slide'].includes(stroke.type)) {
         const data = {
           startX: stroke.startX, startY: stroke.startY,
           endX: stroke.endX, endY: stroke.endY,
           color: stroke.color, fillColor: stroke.fillColor,
           brushSize: stroke.brushSize, strokeStyle: stroke.strokeStyle,
           cornerRadius: stroke.cornerRadius,
+          ...shadowData
         };
         if (stroke.type === 'line') drawLine(ctx, data);
         else if (stroke.type === 'arrow') drawArrow(ctx, data);
+        else if (stroke.type === 'double_arrow') drawDoubleArrow(ctx, data);
         else if (stroke.type === 'rect') drawRect(ctx, data);
         else if (stroke.type === 'circle') drawCircle(ctx, data);
+        else if (stroke.type === 'triangle') drawTriangle(ctx, data);
+        else if (stroke.type === 'diamond') drawDiamond(ctx, data);
+        else if (stroke.type === 'star') drawStar(ctx, data);
+        else if (stroke.type === 'frame') drawFrame(ctx, data);
+        else if (stroke.type === 'slide') drawSlide(ctx, data);
       }
-      else if (stroke.type === 'text') {
+      else if (['freehand', 'polygon', 'bezier'].includes(stroke.type)) {
+        const data = {
+          points: stroke.points,
+          color: stroke.color, fillColor: stroke.fillColor,
+          brushSize: stroke.brushSize, strokeStyle: stroke.strokeStyle,
+          closed: stroke.closed,
+          ...shadowData
+        };
+        if (stroke.type === 'freehand') drawFreehand(ctx, data);
+        else if (stroke.type === 'polygon') drawPolygon(ctx, data);
+        else if (stroke.type === 'bezier') drawBezier(ctx, data);
+      }
+      else if (['text', 'text_heading', 'text_bullet', 'text_numbered'].includes(stroke.type)) {
         drawText(ctx, {
           startX: stroke.startX, startY: stroke.startY,
           text: stroke.text, fontSize: stroke.fontSize,
           fontFamily: stroke.fontFamily, color: stroke.color,
           bold: stroke.bold, italic: stroke.italic,
+          ...shadowData
         });
       }
       else if (stroke.type === 'image') {
         drawCustomImage(ctx, {
           startX: stroke.startX, startY: stroke.startY,
           width: stroke.width, height: stroke.height,
-          base64: stroke.base64, opacity: stroke.opacity,
+          base64: stroke.base64, ...shadowData,
           _imgCache: stroke._imgCache,
         });
       }
@@ -119,6 +192,33 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
 
     ctx.restore();
   }, [aspectRatio]);
+
+  useEffect(() => {
+    if (selectedStrokeIdRef.current && !isDrawing.current) {
+      const stroke = localStrokes.current.find(s => s.strokeId === selectedStrokeIdRef.current);
+      if (stroke) {
+        let changed = false;
+        if (color && stroke.color !== color) { stroke.color = color; changed = true; }
+        if (fillColor && stroke.fillColor !== fillColor) { stroke.fillColor = fillColor; changed = true; }
+        if (opacity !== undefined && stroke.opacity !== opacity) { stroke.opacity = opacity; changed = true; }
+        if (brushSize && stroke.brushSize !== brushSize) { stroke.brushSize = brushSize; changed = true; }
+        if (strokeStyle && stroke.strokeStyle !== strokeStyle) { stroke.strokeStyle = strokeStyle; changed = true; }
+        if (fontSize && stroke.fontSize !== fontSize) { stroke.fontSize = fontSize; changed = true; }
+        if (fontFamily && stroke.fontFamily !== fontFamily) { stroke.fontFamily = fontFamily; changed = true; }
+        if (textBold !== undefined && stroke.bold !== textBold) { stroke.bold = textBold; changed = true; }
+        if (textItalic !== undefined && stroke.italic !== textItalic) { stroke.italic = textItalic; changed = true; }
+        if (shadowColor && stroke.shadowColor !== shadowColor) { stroke.shadowColor = shadowColor; changed = true; }
+        if (shadowBlur !== undefined && stroke.shadowBlur !== shadowBlur) { stroke.shadowBlur = shadowBlur; changed = true; }
+        if (shadowOffsetX !== undefined && stroke.shadowOffsetX !== shadowOffsetX) { stroke.shadowOffsetX = shadowOffsetX; changed = true; }
+        if (shadowOffsetY !== undefined && stroke.shadowOffsetY !== shadowOffsetY) { stroke.shadowOffsetY = shadowOffsetY; changed = true; }
+
+        if (changed) {
+          redrawMainCanvas();
+          socket?.emit('CANVAS:UPDATE_SHAPE', { strokeId: stroke.strokeId, ...stroke, sessionId });
+        }
+      }
+    }
+  }, [color, fillColor, opacity, brushSize, strokeStyle, fontSize, fontFamily, textBold, textItalic, shadowColor, shadowBlur, shadowOffsetX, shadowOffsetY, redrawMainCanvas, socket, sessionId]);
 
   const resizeCanvases = useCallback(() => {
     const container = containerRef.current;
@@ -128,12 +228,12 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
 
     const { width, height } = container.getBoundingClientRect();
     if (width === 0 || height === 0) return;
-    
+
     main.width = width;
     main.height = height;
     preview.width = width;
     preview.height = height;
-    
+
     redrawMainCanvas();
   }, [redrawMainCanvas]);
 
@@ -146,6 +246,33 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
     return () => ro.disconnect();
   }, [resizeCanvases]);
 
+  // Local Undo/Redo listener
+  useEffect(() => {
+    const handleUndo = (e) => {
+      const strokeId = e.detail;
+      const stroke = localStrokes.current.find(s => s.strokeId === strokeId);
+      if (stroke) {
+        stroke.undone = true;
+        if (strokeId === selectedStrokeIdRef.current) setSelected(null);
+        redrawMainCanvas();
+      }
+    };
+    const handleRedo = (e) => {
+      const strokeId = e.detail;
+      const stroke = localStrokes.current.find(s => s.strokeId === strokeId);
+      if (stroke) {
+        stroke.undone = false;
+        redrawMainCanvas();
+      }
+    };
+    window.addEventListener('canvas:undo-local', handleUndo);
+    window.addEventListener('canvas:redo-local', handleRedo);
+    return () => {
+      window.removeEventListener('canvas:undo-local', handleUndo);
+      window.removeEventListener('canvas:redo-local', handleRedo);
+    };
+  }, [redrawMainCanvas, setSelected]);
+
   // Set up socket callbacks for remote canvas events
   useEffect(() => {
     if (!socket) return;
@@ -155,12 +282,12 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
         const main = mainCanvasRef.current;
         if (!main) return;
         let stroke = useCanvasStore.getState().remoteStrokes[strokeId];
-        
+
         if (!stroke && type) {
           stroke = { type, color, brushSize, points: finalPoints };
         }
         if (!stroke) return;
-        
+
         const ctx = main.getContext('2d');
         const points = finalPoints || stroke.points;
         if (!undone) {
@@ -168,7 +295,7 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
           else if (stroke.type === 'eraser') drawEraser(ctx, points, stroke.brushSize);
           else if (stroke.type === 'highlighter') drawPen(ctx, points, stroke.color, stroke.brushSize, 0.3);
         }
-        
+
         localStrokes.current.push({ strokeId, type: stroke.type, points, color: stroke.color, brushSize: stroke.brushSize, undone });
       },
       onShape: (data) => {
@@ -176,14 +303,14 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
         if (data.type === 'sticky') forceUpdate({});
         else redrawMainCanvas();
       },
-      onText: ({ strokeId, x, y, text, fontSize, fontFamily, color: c, undone = false }) => {
+      onText: ({ strokeId, type, x, y, text, fontSize, fontFamily, color: c, fillColor: f, undone = false }) => {
         const main = mainCanvasRef.current;
         if (!main) return;
         const ctx = main.getContext('2d');
         if (!undone) {
           drawText(ctx, { startX: x, startY: y, text, fontSize, fontFamily, color: c });
         }
-        localStrokes.current.push({ strokeId, type: 'text', startX: x, startY: y, text, fontSize, fontFamily, color: c, undone });
+        localStrokes.current.push({ strokeId, type: type || 'text', startX: x, startY: y, text, fontSize, fontFamily, color: c, fillColor: f, undone });
       },
       onUndo: ({ strokeId }) => {
         // BUG FIX: undo sets undone = TRUE (was backwards)
@@ -209,7 +336,7 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
           if (text !== undefined) stroke.text = text;
           if (color !== undefined) stroke.color = color;
           if (fillColor !== undefined) stroke.fillColor = fillColor;
-          
+
           if (stroke.type !== 'sticky') {
             redrawMainCanvas();
             if (selectedStrokeIdRef.current === strokeId) redrawPreview();
@@ -264,13 +391,13 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
     const handleArrange = (e) => {
       const action = e.detail; // 'forward', 'backward', 'front', 'back'
       if (!selectedStrokeIdRef.current) return;
-      
+
       const id = selectedStrokeIdRef.current;
       const idx = localStrokes.current.findIndex(s => s.strokeId === id);
       if (idx === -1) return;
 
       const stroke = localStrokes.current.splice(idx, 1)[0];
-      
+
       if (action === 'forward') {
         localStrokes.current.splice(Math.min(idx + 1, localStrokes.current.length), 0, stroke);
       } else if (action === 'backward') {
@@ -282,7 +409,7 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
       }
 
       redrawMainCanvas();
-      
+
       // Optionally broadcast this so other clients see the z-index change
       // Currently our socket doesn't have a direct "reorder" event, but we can emit a save state later
       if (onStrokeComplete) onStrokeComplete();
@@ -304,7 +431,7 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
         forceUpdate({});
       }
     };
-    
+
     const handleDelete = () => {
       if (!selectedStrokeIdRef.current) return;
       const id = selectedStrokeIdRef.current;
@@ -321,10 +448,37 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
     window.addEventListener('canvas:duplicate-selected', handleDuplicate);
     window.addEventListener('canvas:delete-selected', handleDelete);
 
+    const handleToggleLock = () => {
+      if (!selectedStrokeIdRef.current) return;
+      const stroke = localStrokes.current.find(s => s.strokeId === selectedStrokeIdRef.current);
+      if (stroke) {
+        stroke.locked = !stroke.locked;
+        redrawMainCanvas();
+        socket?.emit('CANVAS:UPDATE_SHAPE', { strokeId: stroke.strokeId, locked: stroke.locked, sessionId });
+      }
+    };
+
+    const handleFlip = (e) => {
+      const axis = e.detail; // 'horizontal' or 'vertical'
+      if (!selectedStrokeIdRef.current) return;
+      const stroke = localStrokes.current.find(s => s.strokeId === selectedStrokeIdRef.current);
+      if (stroke) {
+        if (axis === 'horizontal') stroke.flipX = !stroke.flipX;
+        if (axis === 'vertical') stroke.flipY = !stroke.flipY;
+        redrawMainCanvas();
+        socket?.emit('CANVAS:UPDATE_SHAPE', { strokeId: stroke.strokeId, flipX: stroke.flipX, flipY: stroke.flipY, sessionId });
+      }
+    };
+
+    window.addEventListener('canvas:toggle-lock', handleToggleLock);
+    window.addEventListener('canvas:flip', handleFlip);
+
     return () => {
       window.removeEventListener('canvas:arrange', handleArrange);
       window.removeEventListener('canvas:duplicate-selected', handleDuplicate);
       window.removeEventListener('canvas:delete-selected', handleDelete);
+      window.removeEventListener('canvas:toggle-lock', handleToggleLock);
+      window.removeEventListener('canvas:flip', handleFlip);
     };
   }, [redrawMainCanvas, onStrokeComplete, pushUndo, socket, sessionId, setSelected]);
 
@@ -418,19 +572,30 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
     });
 
     // Draw local stroke preview
-    if (isDrawing.current && currentPoints.current.length > 1 && activeTool !== TOOLS.LASER && activeTool !== TOOLS.SELECT) {
-      const endPt = currentPoints.current[currentPoints.current.length - 1];
-      if (activeTool === TOOLS.PEN) drawPen(ctx, currentPoints.current, color, brushSize, opacity);
-      else if (activeTool === TOOLS.MARKER) drawPen(ctx, currentPoints.current, color, brushSize * 2, opacity || 0.8);
-      else if (activeTool === TOOLS.HIGHLIGHTER) drawPen(ctx, currentPoints.current, color, Math.max(brushSize, 16), 0.3);
-      else if (activeTool === TOOLS.ERASER && mainCtx) drawEraser(mainCtx, currentPoints.current, eraserSize);
-      else if (activeTool === TOOLS.LINE) drawLine(ctx, { startX: shapeStart.current.x, startY: shapeStart.current.y, endX: endPt.x, endY: endPt.y, color, brushSize, strokeStyle });
-      else if (activeTool === TOOLS.ARROW) drawArrow(ctx, { startX: shapeStart.current.x, startY: shapeStart.current.y, endX: endPt.x, endY: endPt.y, color, brushSize });
-      else if (activeTool === TOOLS.RECT) drawRect(ctx, { startX: shapeStart.current.x, startY: shapeStart.current.y, endX: endPt.x, endY: endPt.y, color, fillColor, brushSize, strokeStyle });
-      else if (activeTool === TOOLS.CIRCLE) drawCircle(ctx, { startX: shapeStart.current.x, startY: shapeStart.current.y, endX: endPt.x, endY: endPt.y, color, fillColor, brushSize, strokeStyle });
-      else if (activeTool === TOOLS.TRIANGLE) drawTriangle(ctx, { startX: shapeStart.current.x, startY: shapeStart.current.y, endX: endPt.x, endY: endPt.y, color, fillColor, brushSize, strokeStyle });
-      else if (activeTool === TOOLS.DIAMOND) drawDiamond(ctx, { startX: shapeStart.current.x, startY: shapeStart.current.y, endX: endPt.x, endY: endPt.y, color, fillColor, brushSize, strokeStyle });
-      else if (activeTool === TOOLS.STAR) drawStar(ctx, { startX: shapeStart.current.x, startY: shapeStart.current.y, endX: endPt.x, endY: endPt.y, color, fillColor, brushSize, strokeStyle });
+    if (isDrawing.current && activeTool !== TOOLS.LASER && activeTool !== TOOLS.SELECT) {
+      if ((activeTool === TOOLS.POLYGON || activeTool === TOOLS.BEZIER) && currentPoints.current.length > 0) {
+        const pts = [...currentPoints.current];
+        if (mousePosRef.current) pts.push(mousePosRef.current);
+        if (activeTool === TOOLS.POLYGON) drawPolygon(ctx, { points: pts, color, fillColor, brushSize, opacity, closed: false });
+        else drawBezier(ctx, { points: pts, color, fillColor, brushSize, opacity });
+      } else if (currentPoints.current.length > 1) {
+        const endPt = currentPoints.current[currentPoints.current.length - 1];
+        if (activeTool === TOOLS.PEN) drawPen(ctx, currentPoints.current, color, brushSize, opacity);
+        else if (activeTool === TOOLS.MARKER) drawPen(ctx, currentPoints.current, color, brushSize * 2, opacity || 0.8);
+        else if (activeTool === TOOLS.HIGHLIGHTER) drawPen(ctx, currentPoints.current, color, Math.max(brushSize, 16), 0.3);
+        else if (activeTool === TOOLS.ERASER && mainCtx) drawEraser(mainCtx, currentPoints.current, eraserSize);
+        else if (activeTool === TOOLS.FREEHAND) drawFreehand(ctx, { points: currentPoints.current, color, fillColor, brushSize, opacity });
+        else if (activeTool === TOOLS.LINE) drawLine(ctx, { startX: shapeStart.current.x, startY: shapeStart.current.y, endX: endPt.x, endY: endPt.y, color, brushSize, strokeStyle });
+        else if (activeTool === TOOLS.ARROW) drawArrow(ctx, { startX: shapeStart.current.x, startY: shapeStart.current.y, endX: endPt.x, endY: endPt.y, color, brushSize });
+        else if (activeTool === TOOLS.DOUBLE_ARROW) drawDoubleArrow(ctx, { startX: shapeStart.current.x, startY: shapeStart.current.y, endX: endPt.x, endY: endPt.y, color, brushSize });
+        else if (activeTool === TOOLS.RECT) drawRect(ctx, { startX: shapeStart.current.x, startY: shapeStart.current.y, endX: endPt.x, endY: endPt.y, color, fillColor, brushSize, strokeStyle });
+        else if (activeTool === TOOLS.CIRCLE) drawCircle(ctx, { startX: shapeStart.current.x, startY: shapeStart.current.y, endX: endPt.x, endY: endPt.y, color, fillColor, brushSize, strokeStyle });
+        else if (activeTool === TOOLS.TRIANGLE) drawTriangle(ctx, { startX: shapeStart.current.x, startY: shapeStart.current.y, endX: endPt.x, endY: endPt.y, color, fillColor, brushSize, strokeStyle });
+        else if (activeTool === TOOLS.DIAMOND) drawDiamond(ctx, { startX: shapeStart.current.x, startY: shapeStart.current.y, endX: endPt.x, endY: endPt.y, color, fillColor, brushSize, strokeStyle });
+        else if (activeTool === TOOLS.STAR) drawStar(ctx, { startX: shapeStart.current.x, startY: shapeStart.current.y, endX: endPt.x, endY: endPt.y, color, fillColor, brushSize, strokeStyle });
+        else if (activeTool === TOOLS.FRAME) drawFrame(ctx, { startX: shapeStart.current.x, startY: shapeStart.current.y, endX: endPt.x, endY: endPt.y, color, fillColor, brushSize, opacity });
+        else if (activeTool === TOOLS.SLIDE) drawSlide(ctx, { startX: shapeStart.current.x, startY: shapeStart.current.y, endX: endPt.x, endY: endPt.y, color, fillColor, brushSize, opacity });
+      }
     }
 
     // Draw Laser Points
@@ -441,7 +606,7 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
       ctx.lineJoin = 'round';
       ctx.shadowBlur = 10;
       ctx.shadowColor = '#ef4444';
-      
+
       const now = Date.now();
       for (let i = 1; i < laserPoints.current.length; i++) {
         const p1 = laserPoints.current[i - 1];
@@ -461,44 +626,38 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
     // Draw Selection Bounding Box
     if (selectedStrokeIdRef.current) {
       const stroke = localStrokes.current.find(s => s.strokeId === selectedStrokeIdRef.current);
-      if (stroke && ['image', 'rect', 'circle', 'line', 'arrow'].includes(stroke.type)) {
-        let x, y, w, h;
-        if (stroke.type === 'image') {
-          x = stroke.startX; y = stroke.startY; w = stroke.width; h = stroke.height;
-        } else {
-          x = Math.min(stroke.startX, stroke.endX);
-          y = Math.min(stroke.startY, stroke.endY);
-          w = Math.abs(stroke.endX - stroke.startX);
-          h = Math.abs(stroke.endY - stroke.startY);
-        }
-        
+      if (stroke && isSelectableType(stroke.type)) {
+        const { x, y, w, h } = getStrokeBoundingBox(stroke);
+
         ctx.save();
-        ctx.strokeStyle = '#6366f1';
+        ctx.strokeStyle = stroke.locked ? '#ef4444' : '#6366f1';
         ctx.lineWidth = 2;
         ctx.setLineDash([6, 4]);
         ctx.strokeRect(x - 4, y - 4, w + 8, h + 8);
         ctx.setLineDash([]);
-        
-        // 8 handles: corners + midpoints
-        ctx.fillStyle = '#ffffff';
-        ctx.strokeStyle = '#6366f1';
-        ctx.lineWidth = 2;
-        const handles = [
-          [x - 4, y - 4], [x + w/2, y - 4], [x + w + 4, y - 4],
-          [x + w + 4, y + h/2],
-          [x + w + 4, y + h + 4], [x + w/2, y + h + 4], [x - 4, y + h + 4],
-          [x - 4, y + h/2],
-        ];
-        handles.forEach(([hx, hy]) => {
-          ctx.beginPath();
-          ctx.arc(hx, hy, 5, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-        });
+
+        if (!stroke.locked) {
+          // 8 handles: corners + midpoints
+          ctx.fillStyle = '#ffffff';
+          ctx.strokeStyle = '#6366f1';
+          ctx.lineWidth = 2;
+          const handles = [
+            [x - 4, y - 4], [x + w / 2, y - 4], [x + w + 4, y - 4],
+            [x + w + 4, y + h / 2],
+            [x + w + 4, y + h + 4], [x + w / 2, y + h + 4], [x - 4, y + h + 4],
+            [x - 4, y + h / 2],
+          ];
+          handles.forEach(([hx, hy]) => {
+            ctx.beginPath();
+            ctx.arc(hx, hy, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+          });
+        }
         ctx.restore();
       }
     }
-    
+
     ctx.restore();
   }, [activeTool, color, fillColor, brushSize, eraserSize, opacity, strokeStyle, aspectRatio]);
 
@@ -532,8 +691,19 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
   const handleStickyUpdate = useCallback((strokeId, updates) => {
     const stroke = localStrokes.current.find(s => s.strokeId === strokeId);
     if (stroke) {
-      Object.assign(stroke, updates);
-      socket?.emit('CANVAS:UPDATE_SHAPE', { strokeId, ...updates });
+      if (updates.x !== undefined) stroke.startX = updates.x;
+      if (updates.y !== undefined) stroke.startY = updates.y;
+      if (updates.text !== undefined) stroke.text = updates.text;
+      if (updates.color !== undefined) stroke.color = updates.color;
+      if (updates.width !== undefined) stroke.width = updates.width;
+      if (updates.height !== undefined) stroke.height = updates.height;
+      
+      socket?.emit('CANVAS:UPDATE_SHAPE', { 
+        strokeId, 
+        ...updates,
+        startX: stroke.startX,
+        startY: stroke.startY
+      });
       forceUpdate({});
     }
   }, [socket]);
@@ -581,7 +751,7 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
               if (stroke.endY !== undefined) stroke.endY += shift;
               if (stroke.y !== undefined) stroke.y += shift;
               changed = true;
-              
+
               // Emit updated position to others since we moved it
               socket?.emit('CANVAS:UPDATE_SHAPE', stroke);
             }
@@ -635,7 +805,7 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
     if (isDrawing.current) return;
     // Close context menu
     setContextMenu(null);
-    
+
     const pos = getPos(e);
     if (isInGap(pos.y)) return;
     activePageIndex.current = getPageIndex(pos.y);
@@ -644,28 +814,20 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
       // Check for resize handles on currently selected shape
       if (selectedStrokeIdRef.current) {
         const stroke = localStrokes.current.find(s => s.strokeId === selectedStrokeIdRef.current);
-        if (stroke && ['image', 'rect', 'circle', 'line', 'arrow'].includes(stroke.type)) {
-          let x, y, w, h;
-          if (stroke.type === 'image') {
-            x = stroke.startX; y = stroke.startY; w = stroke.width; h = stroke.height;
-          } else {
-            x = Math.min(stroke.startX, stroke.endX);
-            y = Math.min(stroke.startY, stroke.endY);
-            w = Math.abs(stroke.endX - stroke.startX);
-            h = Math.abs(stroke.endY - stroke.startY);
-          }
+        if (stroke && !stroke.locked && isSelectableType(stroke.type)) {
+          const { x, y, w, h } = getStrokeBoundingBox(stroke);
           const handles = {
-            nw: [x - 4, y - 4], n: [x + w/2, y - 4], ne: [x + w + 4, y - 4],
-            e: [x + w + 4, y + h/2],
-            se: [x + w + 4, y + h + 4], s: [x + w/2, y + h + 4], sw: [x - 4, y + h + 4],
-            w: [x - 4, y + h/2],
+            nw: [x - 4, y - 4], n: [x + w / 2, y - 4], ne: [x + w + 4, y - 4],
+            e: [x + w + 4, y + h / 2],
+            se: [x + w + 4, y + h + 4], s: [x + w / 2, y + h + 4], sw: [x - 4, y + h + 4],
+            w: [x - 4, y + h / 2],
           };
           for (const [key, [hx, hy]] of Object.entries(handles)) {
             const dx = pos.x - hx;
             const dy = pos.y - hy;
             if (dx * dx + dy * dy <= 144) {
               resizeHandle.current = key;
-              initialStrokeState.current = { x, y, w, h, clickX: pos.x, clickY: pos.y };
+              initialStrokeState.current = { x, y, w, h, clickX: pos.x, clickY: pos.y, fontSize: stroke.fontSize, points: stroke.points ? stroke.points.map(p => ({...p})) : null };
               activePointerId.current = e.pointerId;
               if (e.target.setPointerCapture) e.target.setPointerCapture(e.pointerId);
               isDrawing.current = true;
@@ -680,24 +842,12 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
       for (let i = localStrokes.current.length - 1; i >= 0; i--) {
         const stroke = localStrokes.current[i];
         if (stroke.undone) continue;
-        if (['image', 'rect', 'circle', 'line', 'arrow'].includes(stroke.type)) {
-          let x, y, w, h;
-          if (stroke.type === 'image') {
-            x = stroke.startX; y = stroke.startY; w = stroke.width; h = stroke.height;
-          } else {
-            x = Math.min(stroke.startX, stroke.endX);
-            y = Math.min(stroke.startY, stroke.endY);
-            w = Math.abs(stroke.endX - stroke.startX);
-            h = Math.abs(stroke.endY - stroke.startY);
-          }
+        if (isSelectableType(stroke.type)) {
+          const { x, y, w, h } = getStrokeBoundingBox(stroke);
           if (pos.x >= x - 6 && pos.x <= x + w + 6 && pos.y >= y - 6 && pos.y <= y + h + 6) {
             hitId = stroke.strokeId;
-            dragStartOffset.current = {
-              x: pos.x - stroke.startX,
-              y: pos.y - stroke.startY,
-              x2: stroke.endX !== undefined ? pos.x - stroke.endX : 0,
-              y2: stroke.endY !== undefined ? pos.y - stroke.endY : 0,
-            };
+            dragStartOffset.current = { x: pos.x - (stroke.startX || 0), y: pos.y - (stroke.startY || 0), x2: stroke.endX !== undefined ? pos.x - stroke.endX : 0, y2: stroke.endY !== undefined ? pos.y - stroke.endY : 0, clickX: pos.x, clickY: pos.y };
+            initialStrokeState.current = { points: stroke.points ? stroke.points.map(p => ({...p})) : null };
             break;
           }
         }
@@ -705,17 +855,27 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
       // BUG FIX: deselect if clicking empty space
       setSelected(hitId);
       if (hitId) {
-        activePointerId.current = e.pointerId;
-        if (e.target.setPointerCapture) e.target.setPointerCapture(e.pointerId);
-        isDrawing.current = true;
+        const stroke = localStrokes.current.find(s => s.strokeId === hitId);
+        if (stroke && !stroke.locked) {
+          activePointerId.current = e.pointerId;
+          if (e.target.setPointerCapture) e.target.setPointerCapture(e.pointerId);
+          isDrawing.current = true;
+        }
       }
       redrawPreview();
       return;
     }
 
-    if (activeTool === TOOLS.TEXT) {
-      setTextInput(pos);
-      setTextValue('');
+    if (activeTool === TOOLS.TEXT || activeTool === TOOLS.TEXT_HEADING || activeTool === TOOLS.TEXT_BULLET || activeTool === TOOLS.TEXT_NUMBERED) {
+      setTextInput({ ...pos, tool: activeTool });
+      if (activeTool === TOOLS.TEXT_BULLET) setTextValue('• ');
+      else if (activeTool === TOOLS.TEXT_NUMBERED) setTextValue('1. ');
+      else setTextValue('');
+      
+      if (activeTool === TOOLS.TEXT_HEADING) {
+          useCanvasStore.getState().setFontSize(48);
+          useCanvasStore.getState().setTextBold(true);
+      }
       return;
     }
 
@@ -746,6 +906,20 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
       return;
     }
 
+    if (activeTool === TOOLS.POLYGON || activeTool === TOOLS.BEZIER) {
+      if (!isDrawing.current) {
+        isDrawing.current = true;
+        currentStrokeId.current = uuidv4();
+        currentPoints.current = [pos];
+        shapeStart.current = pos;
+        mousePosRef.current = pos;
+      } else {
+        currentPoints.current.push(pos);
+      }
+      redrawPreview();
+      return;
+    }
+
     activePointerId.current = e.pointerId;
     if (e.target.setPointerCapture) {
       e.target.setPointerCapture(e.pointerId);
@@ -768,9 +942,62 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
 
   const onPointerMove = useCallback((e) => {
     if (e.pointerType === 'touch') e.preventDefault();
-    if (e.pointerId !== activePointerId.current) return;
-
+    
     const pos = getPos(e);
+
+    if (!isDrawing.current && activeTool === TOOLS.SELECT) {
+      let hoverCursor = 'default';
+      let isResizeHandle = false;
+
+      if (selectedStrokeIdRef.current) {
+        const stroke = localStrokes.current.find(s => s.strokeId === selectedStrokeIdRef.current);
+        if (stroke && isSelectableType(stroke.type)) {
+          const { x, y, w, h } = getStrokeBoundingBox(stroke);
+          const handles = {
+            nw: [x - 4, y - 4], n: [x + w / 2, y - 4], ne: [x + w + 4, y - 4],
+            e: [x + w + 4, y + h / 2],
+            se: [x + w + 4, y + h + 4], s: [x + w / 2, y + h + 4], sw: [x - 4, y + h + 4],
+            w: [x - 4, y + h / 2],
+          };
+          for (const [key, [hx, hy]] of Object.entries(handles)) {
+            const dx = pos.x - hx;
+            const dy = pos.y - hy;
+            if (dx * dx + dy * dy <= 144) {
+              isResizeHandle = true;
+              if (key === 'nw' || key === 'se') hoverCursor = 'nwse-resize';
+              else if (key === 'ne' || key === 'sw') hoverCursor = 'nesw-resize';
+              else if (key === 'n' || key === 's') hoverCursor = 'ns-resize';
+              else if (key === 'e' || key === 'w') hoverCursor = 'ew-resize';
+              break;
+            }
+          }
+          
+          if (!isResizeHandle && pos.x >= x - 6 && pos.x <= x + w + 6 && pos.y >= y - 6 && pos.y <= y + h + 6) {
+            hoverCursor = 'move';
+          }
+        }
+      }
+
+      if (hoverCursor === 'default') {
+        for (let i = localStrokes.current.length - 1; i >= 0; i--) {
+          const stroke = localStrokes.current[i];
+          if (stroke.undone) continue;
+          if (isSelectableType(stroke.type)) {
+            const { x, y, w, h } = getStrokeBoundingBox(stroke);
+            if (pos.x >= x - 6 && pos.x <= x + w + 6 && pos.y >= y - 6 && pos.y <= y + h + 6) {
+              hoverCursor = 'move';
+              break;
+            }
+          }
+        }
+      }
+
+      if (containerRef.current && containerRef.current.style.cursor !== hoverCursor) {
+        containerRef.current.style.cursor = hoverCursor;
+      }
+    }
+
+    if (e.pointerId !== activePointerId.current) return;
 
     if (isInGap(pos.y) || (isDrawing.current && getPageIndex(pos.y) !== activePageIndex.current)) {
       if (isDrawing.current) onPointerUp(e);
@@ -780,11 +1007,11 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
     socket?.emit(SOCKET_EVENTS.CURSOR_MOVE, { x: pos.x, y: pos.y, roomId: room?._id, tool: activeTool });
 
     if (!isDrawing.current) return;
-    
+
     if (activeTool === TOOLS.SELECT) {
       const stroke = localStrokes.current.find(s => s.strokeId === selectedStrokeIdRef.current);
       if (!stroke) return;
-      const isSelectable = ['image', 'rect', 'circle', 'line', 'arrow'].includes(stroke.type);
+      const isSelectable = isSelectableType(stroke.type);
       if (!isSelectable) return;
 
       if (resizeHandle.current) {
@@ -798,6 +1025,70 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
           else if (resizeHandle.current === 'sw') { stroke.width = Math.max(minS, w - dx); stroke.height = Math.max(minS, h + dy); if (w - dx >= minS) stroke.startX = x + dx; }
           else if (resizeHandle.current === 'ne') { stroke.width = Math.max(minS, w + dx); stroke.height = Math.max(minS, h - dy); if (h - dy >= minS) stroke.startY = y + dy; }
           else if (resizeHandle.current === 'nw') { stroke.width = Math.max(minS, w - dx); stroke.height = Math.max(minS, h - dy); if (w - dx >= minS) stroke.startX = x + dx; if (h - dy >= minS) stroke.startY = y + dy; }
+        } else if (stroke.type === 'slide') {
+          let newW = Math.max(minS, w + (resizeHandle.current.includes('e') ? dx : -dx));
+          let newH = newW * 9 / 16;
+          
+          if (resizeHandle.current === 'se') { stroke.endX = x + newW; stroke.endY = y + newH; }
+          else if (resizeHandle.current === 'nw') { stroke.startX = x + w - newW; stroke.startY = y + h - newH; }
+          else if (resizeHandle.current === 'ne') { stroke.endX = x + newW; stroke.startY = y + h - newH; }
+          else if (resizeHandle.current === 'sw') { stroke.startX = x + w - newW; stroke.endY = y + newH; }
+          else if (resizeHandle.current === 'e' || resizeHandle.current === 'w') {
+             if (resizeHandle.current === 'e') stroke.endX = x + newW;
+             else stroke.startX = x + w - newW;
+             stroke.endY = y + newH;
+          }
+          else if (resizeHandle.current === 's' || resizeHandle.current === 'n') {
+             newH = Math.max(minS, h + (resizeHandle.current === 's' ? dy : -dy));
+             newW = newH * 16 / 9;
+             if (resizeHandle.current === 's') stroke.endY = y + newH;
+             else stroke.startY = y + h - newH;
+             stroke.endX = x + newW;
+          }
+        } else if (['polygon', 'bezier', 'freehand'].includes(stroke.type)) {
+          let newW = w, newH = h;
+          if (resizeHandle.current.includes('e')) newW = Math.max(minS, w + dx);
+          if (resizeHandle.current.includes('w')) newW = Math.max(minS, w - dx);
+          if (resizeHandle.current.includes('s')) newH = Math.max(minS, h + dy);
+          if (resizeHandle.current.includes('n')) newH = Math.max(minS, h - dy);
+
+          const scaleX = newW / (w || 1);
+          const scaleY = newH / (h || 1);
+          
+          const origPts = initialStrokeState.current.points;
+          if (origPts) {
+            stroke.points = origPts.map(p => ({
+              x: resizeHandle.current.includes('w') ? (x + w) - (x + w - p.x) * scaleX : x + (p.x - x) * scaleX,
+              y: resizeHandle.current.includes('n') ? (y + h) - (y + h - p.y) * scaleY : y + (p.y - y) * scaleY
+            }));
+          }
+        } else if (stroke.type === 'text') {
+          const initialFontSize = initialStrokeState.current.fontSize || 18;
+          let newH = h;
+          if (resizeHandle.current.includes('s')) newH = Math.max(minS, h + dy);
+          else if (resizeHandle.current.includes('n')) newH = Math.max(minS, h - dy);
+          
+          const scale = newH / h;
+          stroke.fontSize = Math.max(10, initialFontSize * scale);
+          
+          const main = mainCanvasRef.current;
+          if (main) {
+            const ctx = main.getContext('2d');
+            ctx.font = `${stroke.italic ? 'italic ' : ''}${stroke.bold ? 'bold ' : ''}${stroke.fontSize}px ${stroke.fontFamily || 'Inter'}, sans-serif`;
+            let maxWidth = 0;
+            const lines = (stroke.text || '').split('\n');
+            lines.forEach(line => {
+              const metrics = ctx.measureText(line);
+              if (metrics.width > maxWidth) maxWidth = metrics.width;
+            });
+            const newHeight = lines.length * (stroke.fontSize * 1.4);
+            
+            if (resizeHandle.current.includes('n')) stroke.startY = y + h - newHeight;
+            if (resizeHandle.current.includes('w')) stroke.startX = x + w - maxWidth;
+            
+            stroke.endX = stroke.startX + maxWidth;
+            stroke.endY = stroke.startY + newHeight;
+          }
         } else {
           if (resizeHandle.current === 'se' || resizeHandle.current === 'e' || resizeHandle.current === 's') { stroke.endX = pos.x; stroke.endY = pos.y; }
           else if (resizeHandle.current === 'nw' || resizeHandle.current === 'n' || resizeHandle.current === 'w') { stroke.startX = pos.x; stroke.startY = pos.y; }
@@ -805,11 +1096,18 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
           else if (resizeHandle.current === 'sw') { stroke.startX = pos.x; stroke.endY = pos.y; }
         }
       } else {
-        stroke.startX = pos.x - dragStartOffset.current.x;
-        stroke.startY = pos.y - dragStartOffset.current.y;
-        if (stroke.endX !== undefined) {
-          stroke.endX = pos.x - dragStartOffset.current.x2;
-          stroke.endY = pos.y - dragStartOffset.current.y2;
+        if (['polygon', 'bezier', 'freehand'].includes(stroke.type)) {
+           const ddx = pos.x - dragStartOffset.current.clickX;
+           const ddy = pos.y - dragStartOffset.current.clickY;
+           const origPts = initialStrokeState.current?.points || stroke.points;
+           stroke.points = origPts.map(p => ({ x: p.x + ddx, y: p.y + ddy }));
+        } else {
+           stroke.startX = pos.x - dragStartOffset.current.x;
+           stroke.startY = pos.y - dragStartOffset.current.y;
+           if (stroke.endX !== undefined) {
+             stroke.endX = pos.x - dragStartOffset.current.x2;
+             stroke.endY = pos.y - dragStartOffset.current.y2;
+           }
         }
       }
       redrawMainCanvas();
@@ -821,7 +1119,7 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
       laserPoints.current.push({ x: pos.x, y: pos.y, timestamp: Date.now() });
       return;
     }
-    
+
     currentPoints.current.push(pos);
     redrawPreview();
 
@@ -834,8 +1132,13 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
 
   const onPointerUp = useCallback((e) => {
     if (e.pointerId !== activePointerId.current) return;
-    activePointerId.current = null;
     
+    if (activeTool === TOOLS.POLYGON || activeTool === TOOLS.BEZIER) {
+      // Don't release capture or reset isDrawing yet
+      return;
+    }
+    
+    activePointerId.current = null;
     if (e.target.releasePointerCapture) e.target.releasePointerCapture(e.pointerId);
     if (!isDrawing.current) return;
     isDrawing.current = false;
@@ -843,12 +1146,13 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
     if (activeTool === TOOLS.SELECT) {
       if (selectedStrokeIdRef.current) {
         const stroke = localStrokes.current.find(s => s.strokeId === selectedStrokeIdRef.current);
-        if (stroke && ['image', 'rect', 'circle', 'line', 'arrow'].includes(stroke.type)) {
+        if (stroke && isSelectableType(stroke.type)) {
           socket?.emit('CANVAS:UPDATE_SHAPE', {
             strokeId: stroke.strokeId,
             startX: stroke.startX, startY: stroke.startY,
             endX: stroke.endX, endY: stroke.endY,
             width: stroke.width, height: stroke.height,
+            points: stroke.points,
           });
         }
       }
@@ -870,14 +1174,16 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
       startX: shapeStart.current?.x, startY: shapeStart.current?.y,
       endX: pos.x, endY: pos.y,
       color, fillColor, brushSize, strokeStyle, opacity,
+      shadowColor, shadowBlur, shadowOffsetX, shadowOffsetY,
     };
 
     if (activeTool === TOOLS.PEN || activeTool === TOOLS.MARKER) {
       const isMarker = activeTool === TOOLS.MARKER;
       const mSize = isMarker ? brushSize * 2 : brushSize;
       const mOpacity = isMarker ? (opacity || 0.8) : opacity;
-      drawPen(ctx, currentPoints.current, color, mSize, mOpacity);
-      localStrokes.current.push({ strokeId: currentStrokeId.current, type: isMarker ? 'marker' : 'pen', points: [...currentPoints.current], color, brushSize: mSize, undone: false });
+      const data = { shadowColor, shadowBlur, shadowOffsetX, shadowOffsetY };
+      drawPen(ctx, currentPoints.current, color, mSize, mOpacity, data);
+      localStrokes.current.push({ strokeId: currentStrokeId.current, type: isMarker ? 'marker' : 'pen', points: [...currentPoints.current], color, brushSize: mSize, shadowColor, shadowBlur, shadowOffsetX, shadowOffsetY, undone: false });
     } else if (activeTool === TOOLS.HIGHLIGHTER) {
       const hSize = Math.max(brushSize, 16);
       drawPen(ctx, currentPoints.current, color, hSize, 0.3);
@@ -914,10 +1220,35 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
       drawStar(ctx, { ...shapeData });
       localStrokes.current.push({ strokeId: currentStrokeId.current, type: 'star', ...shapeData, undone: false });
       socket?.emit(SOCKET_EVENTS.CANVAS_SHAPE, { strokeId: currentStrokeId.current, type: 'star', ...shapeData, sessionId });
+    } else if (activeTool === TOOLS.DOUBLE_ARROW && shapeStart.current) {
+      drawDoubleArrow(ctx, { ...shapeData });
+      localStrokes.current.push({ strokeId: currentStrokeId.current, type: 'double_arrow', ...shapeData, undone: false });
+      socket?.emit(SOCKET_EVENTS.CANVAS_SHAPE, { strokeId: currentStrokeId.current, type: 'double_arrow', ...shapeData, sessionId });
+    } else if (activeTool === TOOLS.FRAME && shapeStart.current) {
+      drawFrame(ctx, { ...shapeData });
+      localStrokes.current.push({ strokeId: currentStrokeId.current, type: 'frame', ...shapeData, undone: false });
+      socket?.emit(SOCKET_EVENTS.CANVAS_SHAPE, { strokeId: currentStrokeId.current, type: 'frame', ...shapeData, sessionId });
+    } else if (activeTool === TOOLS.SLIDE && shapeStart.current) {
+      drawSlide(ctx, { ...shapeData });
+      localStrokes.current.push({ strokeId: currentStrokeId.current, type: 'slide', ...shapeData, undone: false });
+      socket?.emit(SOCKET_EVENTS.CANVAS_SHAPE, { strokeId: currentStrokeId.current, type: 'slide', ...shapeData, sessionId });
+    } else if (activeTool === TOOLS.FREEHAND) {
+      const pts = currentPoints.current;
+      let closed = false;
+      if (pts.length > 2) {
+        const dx = pts[pts.length - 1].x - pts[0].x;
+        const dy = pts[pts.length - 1].y - pts[0].y;
+        if (dx * dx + dy * dy < 400) closed = true;
+      }
+      const data = { points: [...pts], color, fillColor, brushSize, opacity, closed, shadowColor, shadowBlur, shadowOffsetX, shadowOffsetY };
+      drawFreehand(ctx, data);
+      localStrokes.current.push({ strokeId: currentStrokeId.current, type: 'freehand', ...data, undone: false });
+      socket?.emit(SOCKET_EVENTS.CANVAS_SHAPE, { strokeId: currentStrokeId.current, type: 'freehand', ...data, sessionId });
     }
 
-    clearCanvas(preview);
     pushUndo(currentStrokeId.current);
+
+    clearCanvas(preview);
     if (onStrokeComplete) onStrokeComplete();
     setHasDrawn(true);
 
@@ -932,38 +1263,113 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
     currentStrokeId.current = null;
     currentPoints.current = [];
     shapeStart.current = null;
-  }, [activeTool, color, fillColor, brushSize, eraserSize, opacity, strokeStyle, socket, sessionId, pushUndo, onStrokeComplete]);
+  }, [activeTool, color, fillColor, brushSize, eraserSize, opacity, strokeStyle, shadowColor, shadowBlur, shadowOffsetX, shadowOffsetY, socket, sessionId, pushUndo, onStrokeComplete]);
 
-  const handleTextSubmit = useCallback(() => {
-    if (!textValue.trim() || !textInput) return;
+  const onDoubleClick = useCallback((e) => {
+    if (activeTool === TOOLS.POLYGON || activeTool === TOOLS.BEZIER) {
+      if (isDrawing.current && currentPoints.current.length > 0) {
+        while (currentPoints.current.length > 1) {
+           const last = currentPoints.current[currentPoints.current.length - 1];
+           const prev = currentPoints.current[currentPoints.current.length - 2];
+           if (last && prev && ((last.x - prev.x) ** 2 + (last.y - prev.y) ** 2 < 100)) {
+             currentPoints.current.pop();
+           } else {
+             break;
+           }
+        }
+        isDrawing.current = false;
+        
+        const strokeId = currentStrokeId.current;
+        const data = {
+          strokeId,
+          type: activeTool,
+          points: [...currentPoints.current],
+          color, fillColor, brushSize, strokeStyle, opacity,
+          shadowColor, shadowBlur, shadowOffsetX, shadowOffsetY,
+          closed: activeTool === TOOLS.POLYGON,
+          sessionId
+        };
+        
+        const main = mainCanvasRef.current;
+        if (main) {
+           const ctx = main.getContext('2d');
+           if (activeTool === TOOLS.POLYGON) drawPolygon(ctx, data);
+           else drawBezier(ctx, data);
+        }
+
+        localStrokes.current.push({ ...data, undone: false });
+        socket?.emit('CANVAS:SHAPE', data);
+        pushUndo(strokeId);
+        
+        currentStrokeId.current = null;
+        currentPoints.current = [];
+        redrawPreview();
+        setHasDrawn(true);
+      }
+    }
+  }, [activeTool, color, fillColor, brushSize, strokeStyle, opacity, shadowColor, shadowBlur, shadowOffsetX, shadowOffsetY, socket, sessionId, pushUndo]);
+
+  const handleTextSubmit = useCallback((e) => {
+    if (!textValue.trim() || !textInput) {
+      setTextInput(null);
+      setTextValue('');
+      return;
+    }
     const main = mainCanvasRef.current;
     if (!main) return;
     const ctx = main.getContext('2d');
     const strokeId = uuidv4();
-    drawText(ctx, { startX: textInput.x, startY: textInput.y, text: textValue, fontSize, fontFamily, color });
-    localStrokes.current.push({ strokeId, type: 'text', startX: textInput.x, startY: textInput.y, text: textValue, fontSize, fontFamily, color, undone: false });
+    const type = 'text';
+
+    let maxWidth = 0;
+    const lines = textValue.split('\n');
+    ctx.font = `${textItalic ? 'italic ' : ''}${textBold ? 'bold ' : ''}${fontSize}px ${fontFamily}, sans-serif`;
+    lines.forEach(line => {
+      const metrics = ctx.measureText(line);
+      if (metrics.width > maxWidth) maxWidth = metrics.width;
+    });
+    const height = lines.length * (fontSize * 1.4);
+    const endX = textInput.x + maxWidth;
+    const endY = textInput.y + height;
+
+    drawText(ctx, { startX: textInput.x, startY: textInput.y, text: textValue, fontSize, fontFamily, color, bold: textBold, italic: textItalic });
+
+    localStrokes.current.push({ strokeId, type, startX: textInput.x, startY: textInput.y, endX, endY, text: textValue, fontSize, fontFamily, color, fillColor: null, bold: textBold, italic: textItalic, undone: false });
     pushUndo(strokeId);
     socket?.emit(SOCKET_EVENTS.CANVAS_TEXT, {
-      strokeId, x: textInput.x, y: textInput.y,
-      text: textValue, fontSize, fontFamily, color, sessionId,
+      strokeId, type, x: textInput.x, y: textInput.y, endX, endY,
+      text: textValue, fontSize, fontFamily, color, fillColor: null, bold: textBold, italic: textItalic, sessionId,
     });
     if (onStrokeComplete) onStrokeComplete();
     setTextInput(null);
     setTextValue('');
     setHasDrawn(true);
-  }, [textInput, textValue, color, fontSize, fontFamily, socket, sessionId, pushUndo, onStrokeComplete]);
+  }, [textInput, textValue, textBold, textItalic, color, fontSize, fontFamily, socket, sessionId, pushUndo, onStrokeComplete]);
+
+  // Handle clicking outside text input overlay
+  useEffect(() => {
+    if (!textInput) return;
+    const handleGlobalPointerDown = (e) => {
+      // Don't submit if clicking inside the text input or its toolbar
+      if (e.target.closest('.text-input-overlay')) return;
+      handleTextSubmit();
+    };
+    // Use pointerdown to catch it before focus changes
+    window.addEventListener('pointerdown', handleGlobalPointerDown, { capture: true });
+    return () => window.removeEventListener('pointerdown', handleGlobalPointerDown, { capture: true });
+  }, [textInput, handleTextSubmit]);
 
   // Right-click context menu
   const onContextMenu = useCallback((e) => {
     e.preventDefault();
     const pos = getPos(e);
-    
+
     // Check if we right-clicked a stroke
     let hitStroke = null;
     for (let i = localStrokes.current.length - 1; i >= 0; i--) {
       const stroke = localStrokes.current[i];
       if (stroke.undone) continue;
-      if (['image', 'rect', 'circle', 'line', 'arrow'].includes(stroke.type)) {
+      if (isSelectableType(stroke.type)) {
         const x = Math.min(stroke.startX, stroke.endX ?? stroke.startX);
         const y = Math.min(stroke.startY, stroke.endY ?? stroke.startY);
         const w = Math.abs((stroke.endX ?? stroke.startX) - stroke.startX);
@@ -980,12 +1386,12 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
   }, [getPos, setSelected]);
 
   const getCursor = () => {
-    if (activeTool === TOOLS.SELECT) return selectedStrokeIdRef.current ? 'move' : 'default';
+    if (activeTool === TOOLS.SELECT) return 'default';
     if (activeTool === TOOLS.TEXT) return 'text';
     if (activeTool === TOOLS.ERASER) {
       const size = Math.max(eraserSize, 4);
-      const svgString = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><circle cx="${size/2}" cy="${size/2}" r="${size/2 - 1}" fill="none" stroke="#ffffff" stroke-width="2" opacity="0.9"/><circle cx="${size/2}" cy="${size/2}" r="${size/2 - 1}" fill="none" stroke="#999999" stroke-width="1"/></svg>`;
-      return `url("data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgString)}") ${size/2} ${size/2}, crosshair`;
+      const svgString = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><circle cx="${size / 2}" cy="${size / 2}" r="${size / 2 - 1}" fill="none" stroke="#ffffff" stroke-width="2" opacity="0.9"/><circle cx="${size / 2}" cy="${size / 2}" r="${size / 2 - 1}" fill="none" stroke="#999999" stroke-width="1"/></svg>`;
+      return `url("data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgString)}") ${size / 2} ${size / 2}, crosshair`;
     }
     if (activeTool === TOOLS.PEN || activeTool === TOOLS.MARKER) {
       const strokeHex = color.replace('#', '');
@@ -996,7 +1402,7 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
   };
 
   return (
-    <div ref={containerRef} className="absolute inset-0 overflow-hidden" style={{ cursor: getCursor() }}>
+    <div className="absolute inset-0 z-0 touch-none" ref={containerRef} onDoubleClick={onDoubleClick} style={{ cursor: getCursor() }}>
       {/* Main canvas — committed strokes */}
       <canvas ref={mainCanvasRef} className="absolute inset-0" style={{ zIndex: 1 }} />
       {/* Preview canvas — current stroke being drawn */}
@@ -1014,9 +1420,9 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
 
       {/* Text input overlay */}
       {textInput && (
-        <div className="absolute z-20" style={{ left: textInput.x, top: textInput.y - 4 }}>
+        <div className="absolute z-20 text-input-overlay flex flex-col" style={{ left: textInput.x, top: textInput.y - 4 }}>
           <div
-            className="relative border-2 border-brand-400 rounded-lg bg-black/10 backdrop-blur-sm p-1 shadow-lg"
+            className="relative border-2 border-brand-400 rounded-lg bg-black/5 backdrop-blur-md p-1 shadow-2xl transition-all"
             style={{ minWidth: '150px' }}
           >
             <textarea
@@ -1025,16 +1431,19 @@ const Canvas = forwardRef(function Canvas({ socket, sessionId, aspectRatio = '16
               value={textValue}
               onChange={(e) => setTextValue(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleTextSubmit(); }
                 if (e.key === 'Escape') { setTextInput(null); setTextValue(''); }
               }}
-              onBlur={handleTextSubmit}
-              className="bg-transparent border-none outline-none resize-none w-full"
-              style={{ color, fontSize: `${fontSize}px`, fontFamily, lineHeight: 1.4, minWidth: '150px' }}
-              placeholder="Type here... (Shift+Enter for new line)"
+              className="bg-transparent border-none outline-none w-full custom-scrollbar resize"
+              style={{ color, fontSize: `${fontSize}px`, fontFamily, fontWeight: textBold ? 'bold' : 'normal', fontStyle: textItalic ? 'italic' : 'normal', lineHeight: 1.4, minWidth: '150px' }}
+              placeholder="Type your text..."
             />
-            <div className="text-xs text-gray-400 mt-1">Enter to confirm · Esc to cancel</div>
           </div>
+          <button 
+            onPointerDown={e => { e.preventDefault(); e.stopPropagation(); handleTextSubmit(); }}
+            className="self-end mt-2 px-4 py-1.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold rounded-full shadow-lg transition-transform active:scale-95"
+          >
+            Done
+          </button>
         </div>
       )}
 

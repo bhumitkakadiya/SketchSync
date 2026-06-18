@@ -151,7 +151,7 @@ export default function RoomHeader({ room, sessions = [], currentPageIndex = 0, 
         {/* Undo / Redo */}
         <div className="hidden md:flex items-center gap-0.5 mr-2">
           <button 
-            onClick={() => { const sid = undo(); if(sid) socket.emit(SOCKET_EVENTS.CANVAS_UNDO, { strokeId: sid, sessionId }); }} 
+            onClick={() => { const sid = undo(); if(sid) { socket.emit(SOCKET_EVENTS.CANVAS_UNDO, { strokeId: sid, sessionId }); window.dispatchEvent(new CustomEvent('canvas:undo-local', { detail: sid })); } }} 
             className="p-1 rounded-md hover:bg-brand-500/10 text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] transition-colors flex items-center justify-center" 
             title="Undo"
           >
@@ -160,7 +160,7 @@ export default function RoomHeader({ room, sessions = [], currentPageIndex = 0, 
             </svg>
           </button>
           <button 
-            onClick={() => { const sid = redo(); if(sid) socket.emit(SOCKET_EVENTS.CANVAS_REDO, { strokeId: sid, sessionId }); }} 
+            onClick={() => { const sid = redo(); if(sid) { socket.emit(SOCKET_EVENTS.CANVAS_REDO, { strokeId: sid, sessionId }); window.dispatchEvent(new CustomEvent('canvas:redo-local', { detail: sid })); } }} 
             className="p-1 rounded-md hover:bg-brand-500/10 text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] transition-colors flex items-center justify-center" 
             title="Redo"
           >

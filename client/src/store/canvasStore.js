@@ -8,9 +8,15 @@ export const useCanvasStore = create((set, get) => ({
   brushSize: 4,
   eraserSize: 40,
   opacity: 1,
+  shadowColor: 'transparent',
+  shadowBlur: 0,
+  shadowOffsetX: 0,
+  shadowOffsetY: 0,
   strokeStyle: 'solid', // 'solid' | 'dashed' | 'dotted'
   fontSize: 18,
   fontFamily: 'Inter',
+  textBold: false,
+  textItalic: false,
   isAIOpen: false,
 
   // Undo/Redo stacks (arrays of strokeIds)
@@ -29,9 +35,15 @@ export const useCanvasStore = create((set, get) => ({
   setBrushSize: (size) => set({ brushSize: size }),
   setEraserSize: (size) => set({ eraserSize: size }),
   setOpacity: (opacity) => set({ opacity }),
+  setShadowColor: (shadowColor) => set({ shadowColor }),
+  setShadowBlur: (shadowBlur) => set({ shadowBlur }),
+  setShadowOffsetX: (shadowOffsetX) => set({ shadowOffsetX }),
+  setShadowOffsetY: (shadowOffsetY) => set({ shadowOffsetY }),
   setStrokeStyle: (strokeStyle) => set({ strokeStyle }),
   setFontSize: (fontSize) => set({ fontSize }),
   setFontFamily: (fontFamily) => set({ fontFamily }),
+  setTextBold: (textBold) => set({ textBold }),
+  setTextItalic: (textItalic) => set({ textItalic }),
   toggleAI: () => set((state) => ({ isAIOpen: !state.isAIOpen })),
   setSelectedStrokeId: (id) => set({ selectedStrokeId: id }),
 

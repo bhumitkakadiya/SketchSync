@@ -40,11 +40,21 @@ export default function Room() {
   const handleZoomReset = useCallback(() => setZoom(1), []);
 
   // Board configuration state
-  const [boardConfig, setBoardConfig] = useState({
-    bgStyle: 'none', // 'none', 'dots', 'grid'
-    aspectRatio: '16/9', // '16/9' (Laptop), '1/1.414' (A4 Portrait), '1.414/1' (A4 Landscape), '1/1' (Square)
-    pageTheme: 'dark', // 'light', 'dark'
+  const [boardConfig, setBoardConfig] = useState(() => {
+    const saved = localStorage.getItem('sketchsync_boardConfig');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return {
+      bgStyle: 'none', // 'none', 'dots', 'grid'
+      aspectRatio: '16/9', // '16/9' (Laptop), '1/1.414' (A4 Portrait), '1.414/1' (A4 Landscape), '1/1' (Square)
+      pageTheme: 'dark', // 'light', 'dark'
+    };
   });
+
+  useEffect(() => {
+    localStorage.setItem('sketchsync_boardConfig', JSON.stringify(boardConfig));
+  }, [boardConfig]);
 
   // Current page tracking
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
@@ -182,12 +192,18 @@ export default function Room() {
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
         const strokeId = undo();
-        if (strokeId) socket.emit('CANVAS:UNDO', { strokeId, sessionId });
+        if (strokeId) {
+          socket.emit('CANVAS:UNDO', { strokeId, sessionId });
+          window.dispatchEvent(new CustomEvent('canvas:undo-local', { detail: strokeId }));
+        }
       }
       if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) {
         e.preventDefault();
         const strokeId = redo();
-        if (strokeId) socket.emit('CANVAS:REDO', { strokeId });
+        if (strokeId) {
+          socket.emit('CANVAS:REDO', { strokeId });
+          window.dispatchEvent(new CustomEvent('canvas:redo-local', { detail: strokeId }));
+        }
       }
 
       // Tool shortcuts

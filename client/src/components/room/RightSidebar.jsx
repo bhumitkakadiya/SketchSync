@@ -37,8 +37,10 @@ export default function RightSidebar({ mainCanvasRef,  boardConfig, setBoardConf
   const { activeUsers } = useRoomStore();
 
   const {
-    selectedStrokeId, color, fillColor, opacity, activeTool, brushSize, eraserSize, strokeStyle, fontSize, fontFamily,
-    setColor, setFillColor, setOpacity, setTool, setBrushSize, setEraserSize, setStrokeStyle, setFontSize, setFontFamily, undo, redo
+    selectedStrokeId, color, fillColor, opacity, activeTool, brushSize, eraserSize, strokeStyle, fontSize, fontFamily, textBold, textItalic,
+    shadowColor, shadowBlur, shadowOffsetX, shadowOffsetY,
+    setColor, setFillColor, setOpacity, setTool, setBrushSize, setEraserSize, setStrokeStyle, setFontSize, setFontFamily, setTextBold, setTextItalic,
+    setShadowColor, setShadowBlur, setShadowOffsetX, setShadowOffsetY, undo, redo
   } = useCanvasStore();
   const [recentColors, setRecentColors] = useState([]);
   const fileInputRef = useRef(null);
@@ -177,6 +179,13 @@ export default function RightSidebar({ mainCanvasRef,  boardConfig, setBoardConf
 
   return (
     <div className="relative flex h-full z-40 pointer-events-auto">
+      {panelOpen && (
+        <div className="absolute right-[368px] top-1/2 -translate-y-1/2 z-50 flex justify-end items-center h-12 w-8 animate-in fade-in slide-in-from-right-4 duration-300">
+          <button onClick={() => setPanelOpen(false)} className="w-6 h-12 rounded-l-xl flex items-center justify-center transition-all duration-300 shadow-md group hover:w-8" style={{ background: 'var(--toggle-bg)', border: '1px solid var(--toggle-border)', borderRight: 'none', color: '#00C896' }} title="Close Tools panel">
+            <svg className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/></svg>
+          </button>
+        </div>
+      )}
       {/* Sliding Popover Panel */}
       <div 
         className={`absolute right-12 top-4 bottom-4 rounded-xl flex flex-col overflow-hidden transition-all duration-300 shadow-2xl ${panelOpen ? 'w-80 opacity-100 translate-x-0' : 'w-0 opacity-0 translate-x-4 pointer-events-none'}`}
@@ -188,13 +197,10 @@ export default function RightSidebar({ mainCanvasRef,  boardConfig, setBoardConf
       >
         <div className="w-80 h-full flex flex-col">
           {/* Header */}
-          <div className="px-4 py-3 flex justify-between items-center bg-[color:var(--bg-hover)] border-b border-[color:var(--bg-border)] shrink-0">
+          <div className="px-4 py-3 flex items-center bg-[color:var(--bg-hover)] border-b border-[color:var(--bg-border)] shrink-0">
             <h3 className="font-bold text-[13px] text-[color:var(--text-primary)]">
                {tabs.find(t => t.id === activeTab)?.label}
             </h3>
-            <button onClick={() => setPanelOpen(false)} className="text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] p-1 rounded-md hover:bg-[color:var(--bg-hover)] transition-colors">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-            </button>
           </div>
           
           {/* Content Area */}
@@ -205,23 +211,43 @@ export default function RightSidebar({ mainCanvasRef,  boardConfig, setBoardConf
              {activeTab === 'tools' && (
                <div className="p-4 space-y-5">
 
-                 {/* Tool Grid */}
-                 <div>
-                   <SectionLabel>Tools</SectionLabel>
-                   <div className="grid grid-cols-4 gap-2">
-                     {TOOL_LIST.filter(t => t.id !== TOOLS.SELECT).map(tool => (
-                       <ToolButton key={tool.id} tool={tool} activeTool={activeTool} setTool={setTool} />
-                     ))}
-                     {/* Image Tool */}
-                     <button
-                       onClick={() => fileInputRef.current?.click()}
-                       title="Insert Image"
-                       className="relative w-9 h-9 flex items-center justify-center rounded-xl transition-all duration-150 group hover:scale-105"
-                       style={{ color: 'var(--text-secondary)' }}
-                     >
-                       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                     </button>
-                     <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} />
+                 {/* Categorized Tool Grid */}
+                 <div className="space-y-4">
+                   <div>
+                     <SectionLabel>Shape & Drawing</SectionLabel>
+                     <div className="grid grid-cols-4 gap-2">
+                       {TOOL_LIST.filter(t => t.category === 'draw' || t.category === 'shape').map(tool => (
+                         <ToolButton key={tool.id} tool={tool} activeTool={activeTool} setTool={setTool} />
+                       ))}
+                     </div>
+                   </div>
+                   <div className="border-t border-[color:var(--bg-border)]"></div>
+                   <div>
+                     <SectionLabel>Text & Typography</SectionLabel>
+                     <div className="grid grid-cols-4 gap-2">
+                       {TOOL_LIST.filter(t => t.category === 'text').map(tool => (
+                         <ToolButton key={tool.id} tool={tool} activeTool={activeTool} setTool={setTool} />
+                       ))}
+                     </div>
+                   </div>
+                   <div className="border-t border-[color:var(--bg-border)]"></div>
+                   <div>
+                     <SectionLabel>Media & Utilities</SectionLabel>
+                     <div className="grid grid-cols-4 gap-2">
+                       {TOOL_LIST.filter(t => t.category === 'media').map(tool => (
+                         <ToolButton key={tool.id} tool={tool} activeTool={activeTool} setTool={setTool} />
+                       ))}
+                       {/* Image Tool */}
+                       <button
+                         onClick={() => fileInputRef.current?.click()}
+                         title="Insert Image"
+                         className="relative w-9 h-9 flex items-center justify-center rounded-xl transition-all duration-150 group hover:scale-105"
+                         style={{ color: 'var(--text-secondary)' }}
+                       >
+                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                       </button>
+                       <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} />
+                     </div>
                    </div>
                  </div>
 
@@ -244,7 +270,7 @@ export default function RightSidebar({ mainCanvasRef,  boardConfig, setBoardConf
                        {showStrokeColor && (
                          <div>
                            <SectionLabel>{isTextTool ? 'Text Color' : 'Stroke Color'}</SectionLabel>
-                           <div className="grid grid-cols-6 gap-2 mb-3">
+                           <div className="grid grid-cols-7 gap-2 mb-3 items-center">
                              {DEFAULT_COLORS.map(c => (
                                <button
                                  key={c} onClick={() => applyColor(c, true)}
@@ -252,6 +278,12 @@ export default function RightSidebar({ mainCanvasRef,  boardConfig, setBoardConf
                                  style={{ backgroundColor: c, border: c === '#ffffff' ? '1px solid rgba(255,255,255,0.3)' : 'none' }}
                                />
                              ))}
+                             <label className={`w-6 h-6 rounded-full cursor-pointer transition-all relative flex items-center justify-center shadow-sm hover:scale-110 ${(!DEFAULT_COLORS.includes(color) && color !== 'transparent') ? 'ring-2 ring-white ring-offset-1 ring-offset-gray-800 scale-110' : ''}`} style={{ background: 'conic-gradient(from 90deg, #ff0000, #ff8000, #ffff00, #00ff00, #00ffff, #0000ff, #8000ff, #ff00ff, #ff0000)' }} title="Custom Color">
+                                <svg className="w-3.5 h-3.5 text-white z-10" style={{ filter: 'drop-shadow(0px 1px 1px rgba(0,0,0,0.5))' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                                </svg>
+                                <input type="color" value={color === 'transparent' ? '#000000' : color} onChange={(e) => applyColor(e.target.value, true)} className="opacity-0 absolute inset-0 w-full h-full cursor-pointer z-20" />
+                              </label>
                            </div>
                          </div>
                        )}
@@ -259,7 +291,7 @@ export default function RightSidebar({ mainCanvasRef,  boardConfig, setBoardConf
                        {showFillColor && (
                          <div>
                            <SectionLabel>Fill Color</SectionLabel>
-                           <div className="grid grid-cols-6 gap-2 mb-3">
+                           <div className="grid grid-cols-7 gap-2 mb-3 items-center">
                              <button
                                onClick={() => applyColor('transparent', false)}
                                className={`w-6 h-6 rounded-full border-2 transition-all hover:scale-110 flex items-center justify-center ${fillColor === 'transparent' ? 'ring-2 ring-white ring-offset-1 ring-offset-gray-800' : ''}`}
@@ -273,6 +305,12 @@ export default function RightSidebar({ mainCanvasRef,  boardConfig, setBoardConf
                                  style={{ backgroundColor: c, border: c === '#ffffff' ? '1px solid rgba(255,255,255,0.3)' : 'none' }}
                                />
                              ))}
+                             <label className={`w-6 h-6 rounded-full cursor-pointer transition-all relative flex items-center justify-center shadow-sm hover:scale-110 ${(!DEFAULT_COLORS.includes(fillColor) && fillColor !== 'transparent') ? 'ring-2 ring-white ring-offset-1 ring-offset-gray-800 scale-110' : ''}`} style={{ background: 'conic-gradient(from 90deg, #ff0000, #ff8000, #ffff00, #00ff00, #00ffff, #0000ff, #8000ff, #ff00ff, #ff0000)' }} title="Custom Color">
+                                <svg className="w-3.5 h-3.5 text-white z-10" style={{ filter: 'drop-shadow(0px 1px 1px rgba(0,0,0,0.5))' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                                </svg>
+                                <input type="color" value={fillColor === 'transparent' ? '#ffffff' : fillColor} onChange={(e) => applyColor(e.target.value, false)} className="opacity-0 absolute inset-0 w-full h-full cursor-pointer z-20" />
+                              </label>
                            </div>
                          </div>
                        )}
@@ -285,11 +323,32 @@ export default function RightSidebar({ mainCanvasRef,  boardConfig, setBoardConf
                          </div>
                        )}
 
-                       {/* Font Size */}
+                       {/* Text Formatting */}
                        {isTextTool && (
                          <div className="mb-3">
-                           <SectionLabel>Font Size: {fontSize || 24}px</SectionLabel>
-                           <input type="range" min="12" max="72" value={fontSize || 24} onChange={e => setFontSize(parseInt(e.target.value))} className="w-full accent-brand-500" />
+                           <SectionLabel>Text Formatting</SectionLabel>
+                           
+                           {/* Font Size */}
+                           <div className="flex items-center gap-2 mb-2">
+                             <span className="text-xs text-gray-400 w-12">{fontSize || 24}px</span>
+                             <input type="range" min="12" max="72" value={fontSize || 24} onChange={e => setFontSize(parseInt(e.target.value))} className="flex-1 accent-brand-500" />
+                           </div>
+                           
+                           {/* Style Toggles */}
+                           <div className="flex gap-2">
+                             <button
+                               onClick={() => setTextBold(!textBold)}
+                               className={`flex-1 py-1.5 rounded-lg border transition-all font-serif font-bold ${textBold ? 'bg-brand-500 border-brand-500 text-white' : 'border-[color:var(--bg-border)] text-[color:var(--text-secondary)] hover:bg-[color:var(--bg-hover)]'}`}
+                             >
+                               B
+                             </button>
+                             <button
+                               onClick={() => setTextItalic(!textItalic)}
+                               className={`flex-1 py-1.5 rounded-lg border transition-all font-serif italic ${textItalic ? 'bg-brand-500 border-brand-500 text-white' : 'border-[color:var(--bg-border)] text-[color:var(--text-secondary)] hover:bg-[color:var(--bg-hover)]'}`}
+                             >
+                               I
+                             </button>
+                           </div>
                          </div>
                        )}
 
@@ -482,27 +541,68 @@ export default function RightSidebar({ mainCanvasRef,  boardConfig, setBoardConf
                    <input type="range" min="0.05" max="1" step="0.05" value={opacity} onChange={e => setOpacity(parseFloat(e.target.value))} className="w-full h-1.5 accent-brand-500 rounded-full bg-[color:var(--bg-hover)] appearance-none mt-2" />
                  </div>
                  <div className="pt-5 border-t border-[color:var(--bg-border)]">
-                   <SectionLabel>Arrange Layer</SectionLabel>
-                   <div className="grid grid-cols-2 gap-2">
-                     {[
-                       { label: 'Forward', action: 'forward', icon: 'M5 15l7-7 7 7' },
-                       { label: 'Backward', action: 'backward', icon: 'M19 9l-7 7-7-7' },
-                       { label: 'To Front', action: 'front', icon: 'M4 6h16M4 12h16M4 18h7' },
-                       { label: 'To Back', action: 'back', icon: 'M4 6h7M4 12h16M4 18h16' },
-                     ].map(btn => (
-                       <button key={btn.action} onClick={() => window.dispatchEvent(new CustomEvent('canvas:arrange', { detail: btn.action }))} className="py-2 text-[11px] font-medium rounded-xl transition-colors flex items-center justify-center gap-1.5 hover:bg-[color:var(--bg-hover)] bg-[color:var(--bg-hover)] border border-[color:var(--bg-border)] text-[color:var(--text-primary)] hover:text-[color:var(--text-primary)]">
-                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d={btn.icon} /></svg>
-                         {btn.label}
-                       </button>
-                     ))}
-                   </div>
-                 </div>
-                 <div className="pt-2 space-y-2">
-                   <button className="w-full py-2.5 text-xs font-medium rounded-xl transition-colors flex items-center justify-center gap-2 hover:bg-[color:var(--bg-hover)] text-[color:var(--text-primary)] border border-[color:var(--bg-border)] bg-[color:var(--bg-hover)]" onClick={() => window.dispatchEvent(new CustomEvent('canvas:duplicate-selected'))}>
-                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                     Duplicate
-                   </button>
-                   <button className="w-full py-2.5 text-xs font-medium rounded-xl bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-colors flex items-center justify-center gap-2" onClick={() => { if (!selectedStrokeId) return; window.dispatchEvent(new CustomEvent('canvas:delete-selected')); }}>
+                    <SectionLabel>Drop Shadow</SectionLabel>
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3">
+                        <input type="color" value={shadowColor === 'transparent' ? '#000000' : shadowColor} onChange={e => setShadowColor(e.target.value)} className="w-8 h-8 rounded-lg cursor-pointer border border-white/20 bg-transparent shrink-0" />
+                        <button onClick={() => setShadowColor('transparent')} className={`px-2 py-1.5 text-[10px] font-medium rounded-lg border transition-all ${shadowColor === 'transparent' ? 'bg-brand-500/20 border-brand-500 text-brand-300' : 'border-[color:var(--bg-border)] text-[color:var(--text-secondary)] hover:bg-[color:var(--bg-hover)]'}`}>None</button>
+                      </div>
+                      {shadowColor !== 'transparent' && (
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <span className="text-[10px] text-gray-500 block mb-1">Blur ({shadowBlur})</span>
+                            <input type="range" min="0" max="50" value={shadowBlur} onChange={e => setShadowBlur(parseInt(e.target.value))} className="w-full h-1 accent-brand-500" />
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-gray-500 block mb-1">X Offset ({shadowOffsetX})</span>
+                            <input type="range" min="-50" max="50" value={shadowOffsetX} onChange={e => setShadowOffsetX(parseInt(e.target.value))} className="w-full h-1 accent-brand-500" />
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-gray-500 block mb-1">Y Offset ({shadowOffsetY})</span>
+                            <input type="range" min="-50" max="50" value={shadowOffsetY} onChange={e => setShadowOffsetY(parseInt(e.target.value))} className="w-full h-1 accent-brand-500" />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="pt-5 border-t border-[color:var(--bg-border)]">
+                    <SectionLabel>Arrange Layer</SectionLabel>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { label: 'Forward', action: 'forward', icon: 'M5 15l7-7 7 7' },
+                        { label: 'Backward', action: 'backward', icon: 'M19 9l-7 7-7-7' },
+                        { label: 'To Front', action: 'front', icon: 'M4 6h16M4 12h16M4 18h7' },
+                        { label: 'To Back', action: 'back', icon: 'M4 6h7M4 12h16M4 18h16' },
+                      ].map(btn => (
+                        <button key={btn.action} onClick={() => window.dispatchEvent(new CustomEvent('canvas:arrange', { detail: btn.action }))} className="py-2 text-[11px] font-medium rounded-xl transition-colors flex items-center justify-center gap-1.5 hover:bg-[color:var(--bg-hover)] bg-[color:var(--bg-hover)] border border-[color:var(--bg-border)] text-[color:var(--text-primary)] hover:text-[color:var(--text-primary)]">
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d={btn.icon} /></svg>
+                          {btn.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="pt-2 space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <button className="w-full py-2 text-xs font-medium rounded-xl transition-colors flex items-center justify-center gap-2 hover:bg-[color:var(--bg-hover)] text-[color:var(--text-primary)] border border-[color:var(--bg-border)] bg-[color:var(--bg-hover)]" onClick={() => window.dispatchEvent(new CustomEvent('canvas:duplicate-selected'))}>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                        Duplicate
+                      </button>
+                      <button className="w-full py-2 text-xs font-medium rounded-xl transition-colors flex items-center justify-center gap-2 hover:bg-[color:var(--bg-hover)] text-[color:var(--text-primary)] border border-[color:var(--bg-border)] bg-[color:var(--bg-hover)]" onClick={() => window.dispatchEvent(new CustomEvent('canvas:toggle-lock'))}>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                        Lock
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button className="w-full py-2 text-xs font-medium rounded-xl transition-colors flex items-center justify-center gap-2 hover:bg-[color:var(--bg-hover)] text-[color:var(--text-primary)] border border-[color:var(--bg-border)] bg-[color:var(--bg-hover)]" onClick={() => window.dispatchEvent(new CustomEvent('canvas:flip', { detail: 'horizontal' }))}>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+                        Flip H
+                      </button>
+                      <button className="w-full py-2 text-xs font-medium rounded-xl transition-colors flex items-center justify-center gap-2 hover:bg-[color:var(--bg-hover)] text-[color:var(--text-primary)] border border-[color:var(--bg-border)] bg-[color:var(--bg-hover)]" onClick={() => window.dispatchEvent(new CustomEvent('canvas:flip', { detail: 'vertical' }))}>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M7 8l4-4 4 4m0 8l-4 4-4-4m4-12v16" /></svg>
+                        Flip V
+                      </button>
+                    </div>
+                    <button className="w-full py-2 text-xs font-medium rounded-xl bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-colors flex items-center justify-center gap-2 mt-2" onClick={() => { if (!selectedStrokeId) return; window.dispatchEvent(new CustomEvent('canvas:delete-selected')); }}>
                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                      Delete Element
                    </button>

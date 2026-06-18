@@ -6,15 +6,54 @@ export const clearCanvas = (canvas) => {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 };
 
+export const applyShadowAndTransform = (ctx, data) => {
+  if (!data) return;
+  if (data.shadowColor && data.shadowColor !== 'transparent') {
+    ctx.shadowColor = data.shadowColor;
+    ctx.shadowBlur = data.shadowBlur || 0;
+    ctx.shadowOffsetX = data.shadowOffsetX || 0;
+    ctx.shadowOffsetY = data.shadowOffsetY || 0;
+  }
+  if (data.flipX || data.flipY) {
+    let cx, cy;
+    if (data.type === 'image') {
+      cx = data.startX + (data.width || 0) / 2;
+      cy = data.startY + (data.height || 0) / 2;
+    } else if (data.startX !== undefined && data.endX !== undefined) {
+      cx = (data.startX + data.endX) / 2;
+      cy = (data.startY + data.endY) / 2;
+    } else if (data.points && data.points.length > 0) {
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      data.points.forEach(p => {
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.y > maxY) maxY = p.y;
+      });
+      cx = (minX + maxX) / 2;
+      cy = (minY + maxY) / 2;
+    } else if (data.startX !== undefined && data.startY !== undefined) {
+      cx = data.startX;
+      cy = data.startY;
+    }
+    if (cx !== undefined && cy !== undefined) {
+      ctx.translate(cx, cy);
+      ctx.scale(data.flipX ? -1 : 1, data.flipY ? -1 : 1);
+      ctx.translate(-cx, -cy);
+    }
+  }
+};
+
 const applyStrokeStyle = (ctx, strokeStyle) => {
   if (strokeStyle === 'dashed') ctx.setLineDash([12, 6]);
   else if (strokeStyle === 'dotted') ctx.setLineDash([3, 6]);
   else ctx.setLineDash([]);
 };
 
-export const drawPen = (ctx, points, color, brushSize, opacity = 1) => {
+export const drawPen = (ctx, points, color, brushSize, opacity = 1, data = null) => {
   if (!points || points.length < 2) return;
   ctx.save();
+  applyShadowAndTransform(ctx, data);
   ctx.globalAlpha = opacity;
   ctx.strokeStyle = color;
   ctx.lineWidth = brushSize;
@@ -53,6 +92,7 @@ export const drawEraser = (ctx, points, brushSize) => {
 
 export const drawLine = (ctx, data) => {
   ctx.save();
+  applyShadowAndTransform(ctx, data);
   ctx.globalAlpha = data.opacity || 1;
   ctx.strokeStyle = data.color || '#000';
   ctx.lineWidth = data.brushSize || 4;
@@ -67,6 +107,7 @@ export const drawLine = (ctx, data) => {
 
 export const drawArrow = (ctx, data) => {
   ctx.save();
+  applyShadowAndTransform(ctx, data);
   ctx.globalAlpha = data.opacity || 1;
   ctx.strokeStyle = data.color || '#000';
   ctx.fillStyle = data.color || '#000';
@@ -100,6 +141,7 @@ export const drawArrow = (ctx, data) => {
 
 export const drawRect = (ctx, data) => {
   ctx.save();
+  applyShadowAndTransform(ctx, data);
   ctx.globalAlpha = data.opacity || 1;
   ctx.lineWidth = data.brushSize || 4;
   ctx.lineCap = 'round';
@@ -139,6 +181,7 @@ export const drawRect = (ctx, data) => {
 
 export const drawCircle = (ctx, data) => {
   ctx.save();
+  applyShadowAndTransform(ctx, data);
   ctx.globalAlpha = data.opacity || 1;
   ctx.lineWidth = data.brushSize || 4;
   applyStrokeStyle(ctx, data.strokeStyle);
@@ -162,6 +205,7 @@ export const drawCircle = (ctx, data) => {
 
 export const drawTriangle = (ctx, data) => {
   ctx.save();
+  applyShadowAndTransform(ctx, data);
   ctx.globalAlpha = data.opacity || 1;
   ctx.lineWidth = data.brushSize || 4;
   ctx.lineCap = 'round';
@@ -197,6 +241,7 @@ export const drawTriangle = (ctx, data) => {
 
 export const drawDiamond = (ctx, data) => {
   ctx.save();
+  applyShadowAndTransform(ctx, data);
   ctx.globalAlpha = data.opacity || 1;
   ctx.lineWidth = data.brushSize || 4;
   ctx.lineCap = 'round';
@@ -226,6 +271,7 @@ export const drawDiamond = (ctx, data) => {
 
 export const drawStar = (ctx, data) => {
   ctx.save();
+  applyShadowAndTransform(ctx, data);
   ctx.globalAlpha = data.opacity || 1;
   ctx.lineWidth = data.brushSize || 4;
   ctx.lineCap = 'round';
@@ -270,8 +316,10 @@ export const drawStar = (ctx, data) => {
 
 export const drawText = (ctx, data) => {
   ctx.save();
+  applyShadowAndTransform(ctx, data);
   ctx.globalAlpha = data.opacity || 1;
   ctx.fillStyle = data.color || '#000';
+  ctx.textBaseline = 'top'; // Align text correctly within its bounding box
   const ff = data.fontFamily || 'Inter';
   const bold = data.bold ? 'bold ' : '';
   const italic = data.italic ? 'italic ' : '';
@@ -289,6 +337,7 @@ export const drawText = (ctx, data) => {
 export const drawCustomImage = (ctx, data) => {
   if (!data.base64) return;
   ctx.save();
+  applyShadowAndTransform(ctx, data);
   ctx.globalAlpha = data.opacity || 1;
   const img = new Image();
   const draw = () => {
@@ -306,6 +355,176 @@ export const drawCustomImage = (ctx, data) => {
   };
   img.src = data.base64;
   if (img.complete) draw();
+};
+
+export const drawFreehand = (ctx, data) => {
+  if (!data.points || data.points.length < 2) return;
+  ctx.save();
+  applyShadowAndTransform(ctx, data);
+  ctx.globalAlpha = data.opacity || 1;
+  ctx.lineWidth = data.brushSize || 4;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  
+  ctx.beginPath();
+  ctx.moveTo(data.points[0].x, data.points[0].y);
+  for (let i = 1; i < data.points.length - 1; i++) {
+    const mx = (data.points[i].x + data.points[i + 1].x) / 2;
+    const my = (data.points[i].y + data.points[i + 1].y) / 2;
+    ctx.quadraticCurveTo(data.points[i].x, data.points[i].y, mx, my);
+  }
+  const last = data.points[data.points.length - 1];
+  ctx.lineTo(last.x, last.y);
+
+  if (data.closed) ctx.closePath();
+
+  if (data.fillColor && data.fillColor !== 'transparent') {
+    ctx.fillStyle = data.fillColor;
+    ctx.fill();
+  }
+  ctx.strokeStyle = data.color || '#000';
+  ctx.stroke();
+  ctx.restore();
+};
+
+export const drawPolygon = (ctx, data) => {
+  if (!data.points || data.points.length === 0) return;
+  ctx.save();
+  applyShadowAndTransform(ctx, data);
+  ctx.globalAlpha = data.opacity || 1;
+  ctx.lineWidth = data.brushSize || 4;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  
+  ctx.beginPath();
+  ctx.moveTo(data.points[0].x, data.points[0].y);
+  for (let i = 1; i < data.points.length; i++) {
+    ctx.lineTo(data.points[i].x, data.points[i].y);
+  }
+  if (data.closed) ctx.closePath();
+
+  if (data.fillColor && data.fillColor !== 'transparent') {
+    ctx.fillStyle = data.fillColor;
+    if (data.closed || data.points.length > 2) ctx.fill();
+  }
+  ctx.strokeStyle = data.color || '#000';
+  ctx.stroke();
+  ctx.restore();
+};
+
+export const drawBezier = (ctx, data) => {
+  if (!data.points || data.points.length < 2) return;
+  ctx.save();
+  applyShadowAndTransform(ctx, data);
+  ctx.globalAlpha = data.opacity || 1;
+  ctx.lineWidth = data.brushSize || 4;
+  ctx.lineCap = 'round';
+  
+  ctx.beginPath();
+  const pts = data.points;
+  ctx.moveTo(pts[0].x, pts[0].y);
+  if (pts.length === 2) {
+    ctx.lineTo(pts[1].x, pts[1].y);
+  } else if (pts.length === 3) {
+    ctx.quadraticCurveTo(pts[1].x, pts[1].y, pts[2].x, pts[2].y);
+  } else if (pts.length >= 4) {
+    ctx.bezierCurveTo(pts[1].x, pts[1].y, pts[2].x, pts[2].y, pts[3].x, pts[3].y);
+  }
+  
+  if (data.fillColor && data.fillColor !== 'transparent' && pts.length >= 3) {
+    ctx.fillStyle = data.fillColor;
+    ctx.fill();
+  }
+  ctx.strokeStyle = data.color || '#000';
+  ctx.stroke();
+  ctx.restore();
+};
+
+export const drawDoubleArrow = (ctx, data) => {
+  ctx.save();
+  applyShadowAndTransform(ctx, data);
+  ctx.globalAlpha = data.opacity || 1;
+  ctx.strokeStyle = data.color || '#000';
+  ctx.fillStyle = data.color || '#000';
+  ctx.lineWidth = data.brushSize || 4;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  const dx = data.endX - data.startX;
+  const dy = data.endY - data.startY;
+  const angle = Math.atan2(dy, dx);
+  const headlen = Math.max(12, data.brushSize * 3);
+
+  ctx.beginPath();
+  ctx.moveTo(data.startX + headlen * 0.7 * Math.cos(angle), data.startY + headlen * 0.7 * Math.sin(angle));
+  ctx.lineTo(data.endX - headlen * 0.7 * Math.cos(angle), data.endY - headlen * 0.7 * Math.sin(angle));
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(data.endX, data.endY);
+  ctx.lineTo(data.endX - headlen * Math.cos(angle - Math.PI / 6), data.endY - headlen * Math.sin(angle - Math.PI / 6));
+  ctx.lineTo(data.endX - headlen * Math.cos(angle + Math.PI / 6), data.endY - headlen * Math.sin(angle + Math.PI / 6));
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(data.startX, data.startY);
+  ctx.lineTo(data.startX + headlen * Math.cos(angle - Math.PI / 6), data.startY + headlen * Math.sin(angle - Math.PI / 6));
+  ctx.lineTo(data.startX + headlen * Math.cos(angle + Math.PI / 6), data.startY + headlen * Math.sin(angle + Math.PI / 6));
+  ctx.closePath();
+  ctx.fill();
+  
+  ctx.restore();
+};
+
+export const drawFrame = (ctx, data) => {
+  ctx.save();
+  applyShadowAndTransform(ctx, data);
+  ctx.globalAlpha = data.opacity || 1;
+  
+  const x = Math.min(data.startX, data.endX);
+  const y = Math.min(data.startY, data.endY);
+  const w = Math.abs(data.endX - data.startX);
+  const h = Math.abs(data.endY - data.startY);
+
+  ctx.fillStyle = data.fillColor && data.fillColor !== 'transparent' ? data.fillColor : '#f3f4f6';
+  ctx.fillRect(x, y, w, h);
+  
+  ctx.strokeStyle = data.color || '#9ca3af';
+  ctx.lineWidth = data.brushSize || 2;
+  ctx.strokeRect(x, y, w, h);
+
+  ctx.fillStyle = data.color || '#9ca3af';
+  ctx.font = '12px Inter, sans-serif';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(data.text || 'Frame', x, y - 4);
+  
+  ctx.restore();
+};
+
+export const drawSlide = (ctx, data) => {
+  ctx.save();
+  applyShadowAndTransform(ctx, data);
+  ctx.globalAlpha = data.opacity || 1;
+  
+  let x = Math.min(data.startX, data.endX);
+  let y = Math.min(data.startY, data.endY);
+  let w = Math.abs(data.endX - data.startX);
+  let h = w * (9 / 16);
+  if (data.startY > data.endY) y = data.startY - h;
+  
+  ctx.shadowColor = 'rgba(0,0,0,0.1)';
+  ctx.shadowBlur = 10;
+  ctx.shadowOffsetY = 4;
+  ctx.fillStyle = data.fillColor && data.fillColor !== 'transparent' ? data.fillColor : '#ffffff';
+  ctx.fillRect(x, y, w, h);
+  
+  ctx.shadowColor = 'transparent';
+  ctx.strokeStyle = data.color || '#e5e7eb';
+  ctx.lineWidth = data.brushSize || 1;
+  ctx.strokeRect(x, y, w, h);
+
+  ctx.restore();
 };
 
 const drawStroke = (ctx, stroke) => {
@@ -328,8 +547,17 @@ const drawStroke = (ctx, stroke) => {
     case 'triangle': drawTriangle(ctx, stroke.data); break;
     case 'diamond': drawDiamond(ctx, stroke.data); break;
     case 'star':   drawStar(ctx, stroke.data); break;
-    case 'text':   drawText(ctx, stroke.data);   break;
+    case 'text':
+    case 'text_heading':
+    case 'text_bullet':
+    case 'text_numbered': drawText(ctx, stroke.data); break;
     case 'image':  drawCustomImage(ctx, stroke.data); break;
+    case 'freehand': drawFreehand(ctx, stroke.data); break;
+    case 'polygon': drawPolygon(ctx, stroke.data); break;
+    case 'bezier': drawBezier(ctx, stroke.data); break;
+    case 'double_arrow': drawDoubleArrow(ctx, stroke.data); break;
+    case 'frame': drawFrame(ctx, stroke.data); break;
+    case 'slide': drawSlide(ctx, stroke.data); break;
     default: break;
   }
   ctx.restore();

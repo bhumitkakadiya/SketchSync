@@ -138,8 +138,8 @@ const canvasHandlers = (io, socket) => {
 
   // CANVAS:TEXT
   socket.on('CANVAS:TEXT', async (payload) => {
-    const { strokeId, x, y, text, fontSize, color, sessionId } = payload || {};
-    emit('CANVAS:TEXT', { strokeId, userId: socket.user.id, x, y, text, fontSize, color });
+    const { strokeId, type, x, y, text, fontSize, color, fillColor, bold, italic, sessionId } = payload || {};
+    emit('CANVAS:TEXT', { strokeId, userId: socket.user.id, type, x, y, text, fontSize, color, fillColor, bold, italic });
     try {
       if (!sessionId || !socket.currentRoom) return;
       const session = await Session.findByIdAndUpdate(
@@ -150,12 +150,35 @@ const canvasHandlers = (io, socket) => {
         sessionId, roomId: socket.currentRoom, userId: socket.user.id,
         seqNum: session.strokeCounter,
         timestamp: Date.now() - session.startedAt.getTime(),
-        type: 'text',
-        data: { text, color, fontSize, startX: x, startY: y },
+        type: type || 'text',
+        data: { text, color, fillColor, fontSize, startX: x, startY: y, bold, italic },
         strokeId,
       });
     } catch (err) {
       if (err.code !== 11000) logger.error('TEXT persist error:', err.message);
+    }
+  });
+
+  // CANVAS:SHAPE
+  socket.on('CANVAS:SHAPE', async (payload) => {
+    const { strokeId, type, sessionId, ...data } = payload || {};
+    emit('CANVAS:SHAPE', { strokeId, userId: socket.user.id, type, ...data });
+    try {
+      if (!sessionId || !socket.currentRoom) return;
+      const session = await Session.findByIdAndUpdate(
+        sessionId, { $inc: { strokeCounter: 1, totalStrokes: 1 } }, { new: true }
+      );
+      if (!session) return;
+      await Stroke.create({
+        sessionId, roomId: socket.currentRoom, userId: socket.user.id,
+        seqNum: session.strokeCounter,
+        timestamp: Date.now() - session.startedAt.getTime(),
+        type: type || 'shape',
+        data,
+        strokeId,
+      });
+    } catch (err) {
+      if (err.code !== 11000) logger.error('SHAPE persist error:', err.message);
     }
   });
 

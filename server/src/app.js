@@ -24,11 +24,30 @@ const createApp = () => {
   // Compression
   app.use(compression());
 
+  const allowedOrigins = process.env.CLIENT_ORIGIN ? process.env.CLIENT_ORIGIN.split(',') : [];
+
   // CORS
   app.use(cors({
-    origin: process.env.NODE_ENV === 'production' 
-      ? process.env.CLIENT_ORIGIN 
-      : [process.env.CLIENT_ORIGIN, /^http:\/\/(localhost|127\.0\.0\.1):\d+$/],
+    origin: (origin, callback) => {
+      // allow requests with no origin (like server-to-server or mobile apps)
+      if (!origin) return callback(null, true);
+      
+      // always allow localhost in dev/testing
+      if (/^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin)) {
+        return callback(null, true);
+      }
+      
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      
+      // Auto-allow Vercel preview environments
+      if (/^https:\/\/.*\.vercel\.app$/.test(origin)) {
+        return callback(null, true);
+      }
+      
+      callback(null, false);
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
