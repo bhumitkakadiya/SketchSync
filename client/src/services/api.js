@@ -5,6 +5,9 @@ let baseUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000/api/v1';
 if (baseUrl && !baseUrl.endsWith('/api/v1') && !baseUrl.endsWith('/api/v1/')) {
   baseUrl = baseUrl.replace(/\/$/, '') + '/api/v1';
 }
+if (!baseUrl.endsWith('/')) {
+  baseUrl += '/';
+}
 
 const api = axios.create({
   baseURL: baseUrl,
@@ -52,7 +55,7 @@ api.interceptors.response.use(
 
       try {
         const { data } = await axios.post(
-          `${baseUrl}/auth/refresh`,
+          `${baseUrl}auth/refresh`,
           {},
           { withCredentials: true }
         );
