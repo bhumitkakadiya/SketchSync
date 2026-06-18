@@ -1,8 +1,13 @@
 import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
 
+let baseUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000/api/v1';
+if (baseUrl && !baseUrl.endsWith('/api/v1') && !baseUrl.endsWith('/api/v1/')) {
+  baseUrl = baseUrl.replace(/\/$/, '') + '/api/v1';
+}
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000/api/v1',
+  baseURL: baseUrl,
   withCredentials: true,  // Send httpOnly cookie for refresh
   headers: { 'Content-Type': 'application/json' },
 });
@@ -47,7 +52,7 @@ api.interceptors.response.use(
 
       try {
         const { data } = await axios.post(
-          `${import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000/api/v1'}/auth/refresh`,
+          `${baseUrl}/auth/refresh`,
           {},
           { withCredentials: true }
         );
