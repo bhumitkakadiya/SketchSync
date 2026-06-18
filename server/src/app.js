@@ -15,6 +15,7 @@ const aiRoutes = require('./routes/ai.routes');
 
 const createApp = () => {
   const app = express();
+  app.set('trust proxy', 1);
 
   // Security headers
   app.use(helmet({

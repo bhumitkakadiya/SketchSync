@@ -20,8 +20,15 @@ exports.register = async (req, res, next) => {
     if (!username || !email || !password) {
       return res.status(400).json({ success: false, error: { code: 'MISSING_FIELDS', message: 'username, email, and password are required' } });
     }
-    if (password.length < 6) {
-      return res.status(400).json({ success: false, error: { code: 'WEAK_PASSWORD', message: 'Password must be at least 6 characters' } });
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ success: false, error: { code: 'INVALID_EMAIL', message: 'Please provide a valid email address' } });
+    }
+
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+    if (!passwordRegex.test(password)) {
+      return res.status(400).json({ success: false, error: { code: 'WEAK_PASSWORD', message: 'Password must be at least 8 characters long, and contain at least one uppercase letter, one lowercase letter, one number, and one special character' } });
     }
 
     const user = new User({ username, email, password, displayName: displayName || username });
